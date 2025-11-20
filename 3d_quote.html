@@ -540,6 +540,7 @@
 
     const UNIVERSAL_PROCESS_VALUE = "ALL"; // 空或 ALL 视为全部工艺通用
     const PROCESS_FILTER_ALL = "__ALL__";
+    const VENDOR_FILTER_ALL = "__ALL_VENDOR__";
 
     const CLIENT_DEFAULTS = {
       defaultProfitMargin: 0.4,
@@ -584,8 +585,8 @@
     let isAdmin = false;
     let adminUsername = "";
 
-    let currentMaterialsVendor = "";
-    let currentMachinesVendor = "";
+    let currentMaterialsVendor = VENDOR_FILTER_ALL;
+    let currentMachinesVendor = VENDOR_FILTER_ALL;
     let currentProcessType = PROCESS_TYPES[0].value;
     let currentMaterialsProcessFilter = PROCESS_FILTER_ALL;
     let currentMachinesProcessFilter = PROCESS_FILTER_ALL;
@@ -947,7 +948,7 @@
     // ===== 设置区：厂商过滤 & 新增厂商 =====
     function rebuildMaterialsVendorFilter() {
       const select = document.getElementById("materialsVendorFilter");
-      const prev = currentMaterialsVendor || select.value;
+      const prev = currentMaterialsVendor || select.value || VENDOR_FILTER_ALL;
       const processFilter = document.getElementById("materialsProcessFilter")?.value || PROCESS_FILTER_ALL;
       currentMaterialsProcessFilter = processFilter;
 
@@ -963,6 +964,10 @@
       if (vendors.length === 0) vendors = ["未分类"];
 
       select.innerHTML = "";
+      const allOpt = document.createElement("option");
+      allOpt.value = VENDOR_FILTER_ALL;
+      allOpt.textContent = "全部厂商";
+      select.appendChild(allOpt);
       vendors.forEach(v => {
         const opt = document.createElement("option");
         opt.value = v;
@@ -970,22 +975,24 @@
         select.appendChild(opt);
       });
 
-      currentMaterialsVendor = vendors.includes(prev) ? prev : vendors[0];
+      const allowed = [VENDOR_FILTER_ALL, ...vendors];
+      currentMaterialsVendor = allowed.includes(prev) ? prev : VENDOR_FILTER_ALL;
       select.value = currentMaterialsVendor;
 
-      // 只显示当前厂商 + 当前工艺的行
+      // 只显示当前工艺的行；当厂商为“全部厂商”时显示所有匹配工艺的行
       rows.forEach(row => {
         const vInput = row.querySelector(".mat-vendor");
         const pSelect = row.querySelector(".mat-process");
         const rowProcess = pSelect?.value || UNIVERSAL_PROCESS_VALUE;
         const v = (vInput.value || "").trim() || "未分类";
-        row.style.display = (v === currentMaterialsVendor) && matchesProcessFilter(rowProcess, processFilter) ? "" : "none";
+        const vendorHit = currentMaterialsVendor === VENDOR_FILTER_ALL || v === currentMaterialsVendor;
+        row.style.display = vendorHit && matchesProcessFilter(rowProcess, processFilter) ? "" : "none";
       });
     }
 
     function rebuildMachinesVendorFilter() {
       const select = document.getElementById("machinesVendorFilter");
-      const prev = currentMachinesVendor || select.value;
+      const prev = currentMachinesVendor || select.value || VENDOR_FILTER_ALL;
       const processFilter = document.getElementById("machinesProcessFilter")?.value || PROCESS_FILTER_ALL;
       currentMachinesProcessFilter = processFilter;
 
@@ -1001,6 +1008,10 @@
       if (vendors.length === 0) vendors = ["未分类"];
 
       select.innerHTML = "";
+      const allOpt = document.createElement("option");
+      allOpt.value = VENDOR_FILTER_ALL;
+      allOpt.textContent = "全部厂商";
+      select.appendChild(allOpt);
       vendors.forEach(v => {
         const opt = document.createElement("option");
         opt.value = v;
@@ -1008,7 +1019,8 @@
         select.appendChild(opt);
       });
 
-      currentMachinesVendor = vendors.includes(prev) ? prev : vendors[0];
+      const allowed = [VENDOR_FILTER_ALL, ...vendors];
+      currentMachinesVendor = allowed.includes(prev) ? prev : VENDOR_FILTER_ALL;
       select.value = currentMachinesVendor;
 
       rows.forEach(row => {
@@ -1016,7 +1028,8 @@
         const pSelect = row.querySelector(".mac-process");
         const rowProcess = pSelect?.value || UNIVERSAL_PROCESS_VALUE;
         const v = (vInput.value || "").trim() || "未分类";
-        row.style.display = (v === currentMachinesVendor) && matchesProcessFilter(rowProcess, processFilter) ? "" : "none";
+        const vendorHit = currentMachinesVendor === VENDOR_FILTER_ALL || v === currentMachinesVendor;
+        row.style.display = vendorHit && matchesProcessFilter(rowProcess, processFilter) ? "" : "none";
       });
     }
 
@@ -1084,22 +1097,25 @@
       const matSelect = document.getElementById("material");
 
       const vendors = [...new Set(filteredMaterials.map(m => m.vendor))];
-      const prevVendor = vendorSelect.value;
+      const prevVendor = vendorSelect.value || VENDOR_FILTER_ALL;
       vendorSelect.innerHTML = "";
+      const allOpt = document.createElement("option");
+      allOpt.value = VENDOR_FILTER_ALL;
+      allOpt.textContent = "全部厂商";
+      vendorSelect.appendChild(allOpt);
       vendors.forEach(v => {
         const opt = document.createElement("option");
         opt.value = v;
         opt.textContent = v;
         vendorSelect.appendChild(opt);
       });
-      if (vendors.length > 0) {
-        vendorSelect.value = vendors.includes(prevVendor) ? prevVendor : vendors[0];
-      }
+      const allowed = [VENDOR_FILTER_ALL, ...vendors];
+      vendorSelect.value = allowed.includes(prevVendor) ? prevVendor : VENDOR_FILTER_ALL;
 
       const currentVendor = vendorSelect.value;
       matSelect.innerHTML = "";
       filteredMaterials.forEach((m) => {
-        if (m.vendor === currentVendor) {
+        if (currentVendor === VENDOR_FILTER_ALL || m.vendor === currentVendor) {
           const opt = document.createElement("option");
           opt.value = String(m._idx);
           opt.textContent = m.name;
@@ -1118,22 +1134,25 @@
       const macSelect = document.getElementById("machine");
 
       const vendors = [...new Set(filteredMachines.map(m => m.vendor))];
-      const prevVendor = vendorSelect.value;
+      const prevVendor = vendorSelect.value || VENDOR_FILTER_ALL;
       vendorSelect.innerHTML = "";
+      const allOpt = document.createElement("option");
+      allOpt.value = VENDOR_FILTER_ALL;
+      allOpt.textContent = "全部厂商";
+      vendorSelect.appendChild(allOpt);
       vendors.forEach(v => {
         const opt = document.createElement("option");
         opt.value = v;
         opt.textContent = v;
         vendorSelect.appendChild(opt);
       });
-      if (vendors.length > 0) {
-        vendorSelect.value = vendors.includes(prevVendor) ? prevVendor : vendors[0];
-      }
+      const allowed = [VENDOR_FILTER_ALL, ...vendors];
+      vendorSelect.value = allowed.includes(prevVendor) ? prevVendor : VENDOR_FILTER_ALL;
 
       const currentVendor = vendorSelect.value;
       macSelect.innerHTML = "";
       filteredMachines.forEach((m) => {
-        if (m.vendor === currentVendor) {
+        if (currentVendor === VENDOR_FILTER_ALL || m.vendor === currentVendor) {
           const opt = document.createElement("option");
           opt.value = String(m._idx);
           opt.textContent = m.name;
