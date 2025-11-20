@@ -336,11 +336,8 @@
         <!-- 后处理与数量 -->
         <div>
           <label for="postProcess">后处理等级</label>
-          <select id="postProcess" required>
-            <option value="NONE">无</option>
-            <option value="BASIC">基础处理（去支撑、简单打磨）</option>
-            <option value="FINE">精细处理（打磨、上色等）</option>
-          </select>
+          <select id="postProcess" required></select>
+          <div class="hint">后处理耗时与材料消耗可在下方“后处理设置”中配置。</div>
         </div>
 
         <div>
@@ -423,6 +420,29 @@
         </div>
       </div>
 
+      <!-- 后处理设置 -->
+      <h3 style="display:flex;justify-content:space-between;align-items:center;">
+        后处理设置
+      </h3>
+      <small>字段说明：每件基础时间 + （重量 × 每克时间）用于估算人工工时；每克材料成本用于耗材/涂料等。key 和名称必填，时间/成本不可为负。</small>
+      <table>
+        <thead>
+          <tr>
+            <th style="width:14%;">Key</th>
+            <th style="width:20%;">显示名称</th>
+            <th style="width:16%;">基础时间（分钟）</th>
+            <th style="width:18%;">每克时间（分钟/克）</th>
+            <th style="width:18%;">材料成本（元/克）</th>
+            <th style="width:8%;">操作</th>
+          </tr>
+        </thead>
+        <tbody id="postProcessTableBody"></tbody>
+      </table>
+      <h3 style="display:flex;justify-content:space-between;align-items:center;">
+        -
+        <button id="addPostProcessBtn" class="btn-sub">新增后处理等级</button>
+      </h3>
+
 
 
       <!-- 材料设置 -->
@@ -499,9 +519,12 @@
 
     const PROCESS_TYPES = [
       { value: "FDM_3D_PRINT", label: "FDM 3D 打印" },
-      { value: "WOOD_CNC", label: "木材 CNC 雕刻" },
-      { value: "STONE_CNC", label: "石材雕刻" }
+      { value: "RESIN_3D_PRINT", label: "光固化 3D 打印" },
+      { value: "CNC_MILLING", label: "CNC 雕刻 / 铣削" },
+      { value: "CO2_LASER_ENGRAVE_CUT", label: "CO₂ 激光雕刻 / 切割" }
     ];
+
+    const UNIVERSAL_PROCESS_VALUE = "ALL"; // 空或 ALL 视为全部工艺通用
 
     const CLIENT_DEFAULTS = {
       defaultProfitMargin: 0.4,
@@ -516,23 +539,26 @@
         { vendor: "通用", name: "PLA", pricePerKg: 120, processType: "FDM_3D_PRINT" },
         { vendor: "通用", name: "PETG", pricePerKg: 150, processType: "FDM_3D_PRINT" },
         { vendor: "通用", name: "ABS", pricePerKg: 160, processType: "FDM_3D_PRINT" },
-        { vendor: "通用", name: "光固化树脂", pricePerKg: 220, processType: "FDM_3D_PRINT" },
-        { vendor: "通用木料", name: "桦木板", pricePerKg: 35, processType: "WOOD_CNC" },
-        { vendor: "通用木料", name: "樱桃木板", pricePerKg: 65, processType: "WOOD_CNC" },
-        { vendor: "通用石材", name: "人造石板", pricePerKg: 55, processType: "STONE_CNC" },
-        { vendor: "通用石材", name: "花岗岩毛坯", pricePerKg: 95, processType: "STONE_CNC" }
+        { vendor: "通用", name: "水洗树脂", pricePerKg: 220, processType: "RESIN_3D_PRINT" },
+        { vendor: "通用", name: "高韧树脂", pricePerKg: 260, processType: "RESIN_3D_PRINT" },
+        { vendor: "通用木料", name: "桦木板", pricePerKg: 35, processType: "CNC_MILLING" },
+        { vendor: "通用木料", name: "樱桃木板", pricePerKg: 65, processType: "CNC_MILLING" },
+        { vendor: "通用石材", name: "人造石板", pricePerKg: 55, processType: "CNC_MILLING" },
+        { vendor: "通用石材", name: "花岗岩毛坯", pricePerKg: 95, processType: "CNC_MILLING" },
+        { vendor: "通用板材", name: "亚克力板", pricePerKg: 45, processType: "CO2_LASER_ENGRAVE_CUT" }
       ],
       machines: [
-        { vendor: "Bambu Lab", name: "A1C/通用桌面机", hourlyRate: 10, price: null, expectedLifeYears: null, expectedMonthlyHours: null, processType: "FDM_3D_PRINT" },
-        { vendor: "Bambu Lab", name: "P1S/工业机", hourlyRate: 25, price: null, expectedLifeYears: null, expectedMonthlyHours: null, processType: "FDM_3D_PRINT" },
-        { vendor: "通用木工", name: "三轴木工雕刻机", hourlyRate: 80, price: null, expectedLifeYears: null, expectedMonthlyHours: null, processType: "WOOD_CNC" },
-        { vendor: "通用石材", name: "石材数控雕刻机", hourlyRate: 120, price: null, expectedLifeYears: null, expectedMonthlyHours: null, processType: "STONE_CNC" }
+        { vendor: "Bambu Lab", name: "A1/桌面机", hourlyRate: 10, price: null, expectedLifeYears: null, expectedMonthlyHours: null, processType: "FDM_3D_PRINT" },
+        { vendor: "Elegoo", name: "Saturn 树脂机", hourlyRate: 28, price: null, expectedLifeYears: null, expectedMonthlyHours: null, processType: "RESIN_3D_PRINT" },
+        { vendor: "通用木工", name: "三轴雕刻机", hourlyRate: 80, price: null, expectedLifeYears: null, expectedMonthlyHours: null, processType: "CNC_MILLING" },
+        { vendor: "通用激光", name: "CO₂ 激光雕刻机", hourlyRate: 120, price: null, expectedLifeYears: null, expectedMonthlyHours: null, processType: "CO2_LASER_ENGRAVE_CUT" }
       ],
-      postProcess: {
-        NONE:  { name: "无",     costPerPart: 0 },
-        BASIC: { name: "基础",   costPerPart: 5 },
-        FINE:  { name: "精细",   costPerPart: 20 }
-      }
+      postProcessRules: [
+        { key: "NONE",  name: "无后处理", baseMinutes: 0, minutesPerGram: 0,    extraMaterialCostPerGram: 0 },
+        { key: "BASIC", name: "基础去支撑+简单打磨", baseMinutes: 5, minutesPerGram: 0.02, extraMaterialCostPerGram: 0.02 },
+        { key: "FINE",  name: "精细打磨+底漆", baseMinutes: 10, minutesPerGram: 0.05, extraMaterialCostPerGram: 0.05 },
+        { key: "PAINT", name: "精细打磨+喷涂上色", baseMinutes: 20, minutesPerGram: 0.08, extraMaterialCostPerGram: 0.10 }
+      ]
     };
 
     let runtimeConfig = JSON.parse(JSON.stringify(CLIENT_DEFAULTS));
@@ -551,17 +577,42 @@
       return "¥" + v.toFixed(2);
     }
 
-    function renderProcessOptions(selectEl, value) {
+    function isProcessMatch(itemProcess, current) {
+      if (!itemProcess || itemProcess === UNIVERSAL_PROCESS_VALUE) return true;
+      return itemProcess === current;
+    }
+
+    function getPostRuleByKey(key) {
+      const rules = runtimeConfig.postProcessRules || [];
+      return rules.find(r => r.key === key) || rules[0] || {
+        key: "NONE",
+        name: "无后处理",
+        baseMinutes: 0,
+        minutesPerGram: 0,
+        extraMaterialCostPerGram: 0
+      };
+    }
+
+    function renderProcessOptions(selectEl, value, { includeUniversal = false } = {}) {
       if (!selectEl) return;
       selectEl.innerHTML = "";
+      if (includeUniversal) {
+        const optAll = document.createElement("option");
+        optAll.value = UNIVERSAL_PROCESS_VALUE;
+        optAll.textContent = "通用（全部工艺）";
+        selectEl.appendChild(optAll);
+      }
       PROCESS_TYPES.forEach(pt => {
         const opt = document.createElement("option");
         opt.value = pt.value;
         opt.textContent = pt.label;
         selectEl.appendChild(opt);
       });
-      const fallback = PROCESS_TYPES[0]?.value;
-      selectEl.value = PROCESS_TYPES.some(pt => pt.value === value) ? value : fallback;
+      const allowedValues = PROCESS_TYPES.map(pt => pt.value);
+      const fallback = includeUniversal ? UNIVERSAL_PROCESS_VALUE : PROCESS_TYPES[0]?.value;
+      selectEl.value = (includeUniversal && value === UNIVERSAL_PROCESS_VALUE) || allowedValues.includes(value)
+        ? value
+        : fallback;
     }
 
     function getCurrentProcessType() {
@@ -592,9 +643,10 @@
         const vendor = (vendorInput.value || "").trim() || "未分类";
         const name = (nameInput.value || "").trim();
         const price = parseFloat(priceInput.value);
-        const processType = processSelect?.value || "FDM_3D_PRINT";
+        const processType = processSelect?.value || UNIVERSAL_PROCESS_VALUE;
+        const normalizedProcess = processType === UNIVERSAL_PROCESS_VALUE ? null : processType;
         if (name && !isNaN(price) && price >= 0) {
-          arr.push({ vendor, name, pricePerKg: price, processType });
+          arr.push({ vendor, name, pricePerKg: price, processType: normalizedProcess });
         }
       });
       return arr;
@@ -615,7 +667,8 @@
 
         const vendor = (vendorInput.value || "").trim() || "未分类";
         const name   = (nameInput.value || "").trim();
-        const processType = processSelect?.value || "FDM_3D_PRINT";
+        const processType = processSelect?.value || UNIVERSAL_PROCESS_VALUE;
+        const normalizedProcess = processType === UNIVERSAL_PROCESS_VALUE ? null : processType;
 
         const hourlyRate = parseFloat(rateInput.value);
         const price      = parseFloat(priceInput.value);
@@ -636,10 +689,42 @@
           expectedLifeYears: isNaN(life) || life <= 0 ? null : life,
           expectedMonthlyHours: isNaN(monthH) || monthH <= 0 ? null : monthH,
           powerW: isNaN(power) || power <= 0 ? null : power,
-          processType
+          processType: normalizedProcess
         });
       });
       return arr;
+    }
+
+    function getPostProcessRulesFromTable() {
+      const rows = document.querySelectorAll("#postProcessTableBody tr");
+      const rules = [];
+      let hasError = false;
+      rows.forEach(row => {
+        const keyInput = row.querySelector(".pp-key");
+        const nameInput = row.querySelector(".pp-name");
+        const baseInput = row.querySelector(".pp-base");
+        const perGramInput = row.querySelector(".pp-pergram");
+        const matInput = row.querySelector(".pp-matcost");
+
+        const key = (keyInput.value || "").trim();
+        const name = (nameInput.value || "").trim();
+        const baseMinutes = parseFloat(baseInput.value);
+        const minutesPerGram = parseFloat(perGramInput.value);
+        const extraMaterialCostPerGram = parseFloat(matInput.value);
+
+        if (!key || !name) {
+          hasError = true;
+          return;
+        }
+        if (isNaN(baseMinutes) || baseMinutes < 0 || isNaN(minutesPerGram) || minutesPerGram < 0 || isNaN(extraMaterialCostPerGram) || extraMaterialCostPerGram < 0) {
+          hasError = true;
+          return;
+        }
+
+        rules.push({ key, name, baseMinutes, minutesPerGram, extraMaterialCostPerGram });
+      });
+      if (hasError) return null;
+      return rules;
     }
 
 
@@ -658,7 +743,7 @@
       `;
       tbody.appendChild(tr);
 
-      renderProcessOptions(tr.querySelector(".mat-process"), processType);
+      renderProcessOptions(tr.querySelector(".mat-process"), processType || UNIVERSAL_PROCESS_VALUE, { includeUniversal: true });
 
       tr.querySelector(".mat-delete").addEventListener("click", () => {
         tr.remove();
@@ -749,7 +834,7 @@
       `;
       tbody.appendChild(tr);
 
-      renderProcessOptions(tr.querySelector(".mac-process"), processType);
+      renderProcessOptions(tr.querySelector(".mac-process"), processType || UNIVERSAL_PROCESS_VALUE, { includeUniversal: true });
 
       // 删除按钮
       tr.querySelector(".mac-delete").addEventListener("click", () => {
@@ -769,6 +854,31 @@
           rebuildMachinesVendorFilter();
           rebuildMachineOptions();
           // 注意：这里只刷新 UI，不自动覆盖小时成本，避免你手动改被覆盖
+        });
+      });
+    }
+
+    function appendPostProcessRow(key = "", name = "", baseMinutes = "", minutesPerGram = "", extraMaterialCostPerGram = "") {
+      const tbody = document.getElementById("postProcessTableBody");
+      const tr = document.createElement("tr");
+      tr.innerHTML = `
+        <td><input type="text" class="pp-key" value="${key}"></td>
+        <td><input type="text" class="pp-name" value="${name}"></td>
+        <td><input type="number" min="0" step="0.1" class="pp-base" value="${baseMinutes}"></td>
+        <td><input type="number" min="0" step="0.001" class="pp-pergram" value="${minutesPerGram}"></td>
+        <td><input type="number" min="0" step="0.001" class="pp-matcost" value="${extraMaterialCostPerGram}"></td>
+        <td><button type="button" class="mini-btn pp-delete">删</button></td>
+      `;
+      tbody.appendChild(tr);
+
+      tr.querySelector(".pp-delete").addEventListener("click", () => {
+        tr.remove();
+        rebuildPostProcessOptions();
+      });
+
+      tr.querySelectorAll("input").forEach(input => {
+        input.addEventListener("input", () => {
+          rebuildPostProcessOptions();
         });
       });
     }
@@ -826,14 +936,14 @@
         select.appendChild(opt);
       });
 
-        currentMachinesVendor = vendors.includes(prev) ? prev : vendors[0];
-        select.value = currentMachinesVendor;
+      currentMachinesVendor = vendors.includes(prev) ? prev : vendors[0];
+      select.value = currentMachinesVendor;
 
-        rows.forEach(row => {
-          const vInput = row.querySelector(".mac-vendor");
-          const v = (vInput.value || "").trim() || "未分类";
-          row.style.display = v === currentMachinesVendor ? "" : "none";
-        });
+      rows.forEach(row => {
+        const vInput = row.querySelector(".mac-vendor");
+        const v = (vInput.value || "").trim() || "未分类";
+        row.style.display = v === currentMachinesVendor ? "" : "none";
+      });
     }
 
     document.getElementById("materialsVendorFilter").addEventListener("change", () => {
@@ -885,7 +995,7 @@
       const currentProcess = getCurrentProcessType();
       const filteredMaterials = materials
         .map((m, idx) => ({ ...m, _idx: idx }))
-        .filter(m => (m.processType || "FDM_3D_PRINT") === currentProcess);
+        .filter(m => isProcessMatch(m.processType, currentProcess));
       const vendorSelect = document.getElementById("materialVendor");
       const matSelect = document.getElementById("material");
 
@@ -919,7 +1029,7 @@
       const currentProcess = getCurrentProcessType();
       const filteredMachines = machines
         .map((m, idx) => ({ ...m, _idx: idx }))
-        .filter(m => (m.processType || "FDM_3D_PRINT") === currentProcess);
+        .filter(m => isProcessMatch(m.processType, currentProcess));
       const vendorSelect = document.getElementById("machineVendor");
       const macSelect = document.getElementById("machine");
 
@@ -948,18 +1058,39 @@
       });
     }
 
+    function rebuildPostProcessOptions() {
+      const select = document.getElementById("postProcess");
+      if (!select) return;
+      const rules = getPostProcessRulesFromTable();
+      select.innerHTML = "";
+      const validRules = rules && rules.length ? rules : runtimeConfig.postProcessRules || [];
+      validRules.forEach(rule => {
+        const opt = document.createElement("option");
+        opt.value = rule.key;
+        opt.textContent = rule.name;
+        select.appendChild(opt);
+      });
+      if (select.options.length === 0) {
+        const opt = document.createElement("option");
+        opt.value = "NONE";
+        opt.textContent = "无后处理";
+        select.appendChild(opt);
+      }
+    }
+
     document.getElementById("materialVendor").addEventListener("change", rebuildMaterialOptions);
     document.getElementById("machineVendor").addEventListener("change", rebuildMachineOptions);
 
     function initSettingsFromRuntime() {
       document.getElementById("materialsTableBody").innerHTML = "";
       document.getElementById("machinesTableBody").innerHTML = "";
+      document.getElementById("postProcessTableBody").innerHTML = "";
 
       runtimeConfig.materials.forEach(m => appendMaterialRow(
         m.vendor,
         m.name,
         m.pricePerKg,
-        m.processType || "FDM_3D_PRINT"
+        m.processType || UNIVERSAL_PROCESS_VALUE
       ));
       runtimeConfig.machines.forEach(m => {
         appendMachineRow(
@@ -970,8 +1101,12 @@
           m.expectedLifeYears ?? "",
           m.expectedMonthlyHours ?? "",
           m.powerW ?? "",
-          m.processType || "FDM_3D_PRINT"
+          m.processType || UNIVERSAL_PROCESS_VALUE
         );
+      });
+
+      (runtimeConfig.postProcessRules || []).forEach(rule => {
+        appendPostProcessRow(rule.key, rule.name, rule.baseMinutes, rule.minutesPerGram, rule.extraMaterialCostPerGram);
       });
 
 
@@ -979,6 +1114,7 @@
       rebuildMachinesVendorFilter();
       rebuildMaterialOptions();
       rebuildMachineOptions();
+      rebuildPostProcessOptions();
 
       document.getElementById("configProfitMargin").value = (runtimeConfig.defaultProfitMargin * 100).toFixed(0);
       document.getElementById("configMinPrice").value = runtimeConfig.defaultMinPricePerPart.toString();
@@ -1000,16 +1136,19 @@
         runtimeConfig.setupFee = data.setupFee;
         runtimeConfig.materials = (data.materials || []).map(m => ({
           ...m,
-          processType: m.processType || "FDM_3D_PRINT"
+          processType: m.processType ?? null
         }));
         runtimeConfig.machines = (data.machines || []).map(m => ({
           ...m,
-          processType: m.processType || "FDM_3D_PRINT"
+          processType: m.processType ?? null
         }));
         runtimeConfig.electricityPrice = data.electricityPrice ?? CLIENT_DEFAULTS.electricityPrice;
         runtimeConfig.laborHourlyCost = data.laborHourlyCost ?? CLIENT_DEFAULTS.laborHourlyCost;
         runtimeConfig.machinesPerOperator =  data.machinesPerOperator ?? CLIENT_DEFAULTS.machinesPerOperator;
         runtimeConfig.overheadHourlyPerMachine = data.overheadHourlyPerMachine ?? CLIENT_DEFAULTS.overheadHourlyPerMachine;
+        runtimeConfig.postProcessRules = Array.isArray(data.postProcessRules) && data.postProcessRules.length
+          ? data.postProcessRules
+          : CLIENT_DEFAULTS.postProcessRules;
 
       } catch (e) {
         console.warn("加载服务器设置失败，使用前端默认值:", e);
@@ -1189,6 +1328,12 @@
       }
 
 
+      const postProcessRules = getPostProcessRulesFromTable();
+      if (!postProcessRules) {
+        alert("后处理设置有误：key、名称必填，时间/成本需大于等于 0。");
+        return;
+      }
+
       const payload = {
         materials,
         machines,
@@ -1198,7 +1343,8 @@
         electricityPrice,
         laborHourlyCost,
         machinesPerOperator,
-        overheadHourlyPerMachine
+        overheadHourlyPerMachine,
+        postProcessRules
       };
 
 
@@ -1229,6 +1375,8 @@
         runtimeConfig.setupFee = saved.setupFee;
         runtimeConfig.materials = saved.materials;
         runtimeConfig.machines = saved.machines;
+        runtimeConfig.postProcessRules = saved.postProcessRules;
+        rebuildPostProcessOptions();
         alert("设置已保存到服务器。");
       } catch (e) {
         alert("保存设置失败：" + e.message);
@@ -1283,6 +1431,10 @@
       rebuildMachinesVendorFilter();
       rebuildMachineOptions();
     });
+    document.getElementById("addPostProcessBtn").addEventListener("click", () => {
+      appendPostProcessRow();
+      rebuildPostProcessOptions();
+    });
 
     // ===== 报价计算 & 导出 =====
     document.getElementById("quote-form").addEventListener("submit", function (e) {
@@ -1306,11 +1458,11 @@
       const material = materials[matIndex];
       const machine = machines[macIndex];
 
-      if (!material || material.processType !== processType) {
+      if (!material || !isProcessMatch(material.processType, processType)) {
         alert("请选择与当前加工类型匹配的材料。");
         return;
       }
-      if (!machine || machine.processType !== processType) {
+      if (!machine || !isProcessMatch(machine.processType, processType)) {
         alert("请选择与当前加工类型匹配的设备。");
         return;
       }
@@ -1327,7 +1479,7 @@
       }
 
       const postKey = document.getElementById("postProcess").value;
-      const post = runtimeConfig.postProcess[postKey] || runtimeConfig.postProcess.NONE;
+      const post = getPostRuleByKey(postKey);
 
       const quantity = parseInt(document.getElementById("quantity").value, 10) || 1;
 
@@ -1344,7 +1496,10 @@
 
       const materialCostPerPart = (weight / 1000) * material.pricePerKg;
       const machineCostPerPart = totalHours * machine.hourlyRate;
-      const postCostPerPart = post.costPerPart;
+      const totalPostMinutes = (post.baseMinutes || 0) + (post.minutesPerGram || 0) * weight;
+      const postLaborCost = (runtimeConfig.laborHourlyCost || 0) * totalPostMinutes / 60;
+      const postMaterialCost = (post.extraMaterialCostPerGram || 0) * weight;
+      const postCostPerPart = postLaborCost + postMaterialCost;
       const setupCostPerPart = quantity > 0 ? runtimeConfig.setupFee / quantity : runtimeConfig.setupFee;
 
       const costSumPerPart = materialCostPerPart + machineCostPerPart + postCostPerPart + setupCostPerPart;
@@ -1365,7 +1520,7 @@
         `▶ 设备：${machine.vendor} / ${machine.name}  ${machine.hourlyRate} 元/小时`,
         `   - 单件打印时间：${days} 天 ${hours} 小时 ${minutes} 分钟 ≈ ${totalHours.toFixed(2)} 小时`,
         `   - 设备成本：${formatMoney(machineCostPerPart)}`,
-        `▶ 后处理：${post.name} → 单件后处理成本：${formatMoney(postCostPerPart)}`,
+        `▶ 后处理：${post.name} → 单件后处理成本：${formatMoney(postCostPerPart)}（时间 ${totalPostMinutes.toFixed(2)} 分钟，人工 ${formatMoney(postLaborCost)}，材料 ${formatMoney(postMaterialCost)}）`,
         `▶ 上机/调机费（订单）：${formatMoney(runtimeConfig.setupFee)}  分摊后每件：${formatMoney(setupCostPerPart)}`,
         "",
         `▶ 单件成本小计：${formatMoney(costSumPerPart)}`,
@@ -1396,6 +1551,9 @@
         materialCostPerPart,
         machineCostPerPart,
         postCostPerPart,
+        postLaborCost,
+        postMaterialCost,
+        totalPostMinutes,
         setupCostPerPart,
         costSumPerPart,
         withProfitPerPart,
@@ -1436,7 +1594,7 @@
         `设备成本（单件）：${formatMoney(lastQuote.machineCostPerPart)}`,
         "",
         `后处理等级：${lastQuote.post.name}`,
-        `后处理成本（单件）：${formatMoney(lastQuote.postCostPerPart)}`,
+        `后处理成本（单件）：${formatMoney(lastQuote.postCostPerPart)}（时间 ${lastQuote.totalPostMinutes.toFixed(2)} 分钟，人工 ${formatMoney(lastQuote.postLaborCost)}, 材料 ${formatMoney(lastQuote.postMaterialCost)}）`,
         "",
         `上机/调机费（订单）：${formatMoney(runtimeConfig.setupFee)}`,
         `分摊后上机费（单件）：${formatMoney(lastQuote.setupCostPerPart)}`,
