@@ -54,6 +54,8 @@ class PostProcessRule(BaseModel):
     baseMinutes: float            # 每件固定基础时间（分钟）
     minutesPerGram: float         # 每克增加的时间（分钟/克）
     extraMaterialCostPerGram: float = 0.0  # 每克额外材料成本（元/克）
+    processType: Optional[str] = None       # 适用的加工工艺（None 表示通用）
+    costMultiplier: float = 1.0             # 成本系数，可按工艺调整最终价格
 
 
 class Settings(BaseModel):
@@ -129,6 +131,7 @@ DEFAULT_SETTINGS = Settings(
             baseMinutes=0,
             minutesPerGram=0,
             extraMaterialCostPerGram=0,
+            costMultiplier=1,
         ),
         PostProcessRule(
             key="BASIC",
@@ -136,6 +139,7 @@ DEFAULT_SETTINGS = Settings(
             baseMinutes=5,
             minutesPerGram=0.02,
             extraMaterialCostPerGram=0.02,
+            costMultiplier=1,
         ),
         PostProcessRule(
             key="FINE",
@@ -143,6 +147,7 @@ DEFAULT_SETTINGS = Settings(
             baseMinutes=10,
             minutesPerGram=0.05,
             extraMaterialCostPerGram=0.05,
+            costMultiplier=1.1,
         ),
         PostProcessRule(
             key="PAINT",
@@ -150,6 +155,7 @@ DEFAULT_SETTINGS = Settings(
             baseMinutes=20,
             minutesPerGram=0.08,
             extraMaterialCostPerGram=0.10,
+            costMultiplier=1.2,
         ),
     ],
 )
@@ -210,7 +216,16 @@ def load_settings() -> Settings:
 
             # 新增：如果旧文件里没有，就用默认规则
             postProcessRules=(
-                [PostProcessRule(**r) for r in post_rules]
+                [
+                    PostProcessRule(
+                        **{
+                            **r,
+                            "costMultiplier": r.get("costMultiplier", 1),
+                            "processType": r.get("processType", None),
+                        }
+                    )
+                    for r in post_rules
+                ]
                 if isinstance(post_rules, list)
                 else DEFAULT_SETTINGS.postProcessRules
             ),
