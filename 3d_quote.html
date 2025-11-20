@@ -1,0 +1,1373 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <title>3D 打印报价计算器</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <style>
+    body {
+      font-family: -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,"Helvetica Neue",Arial,"Noto Sans","PingFang SC","Microsoft YaHei",sans-serif;
+      background: #f5f5f7;
+      margin: 0;
+      padding: 20px;
+    }
+    .container {
+      max-width: 980px;
+      margin: 0 auto;
+      background: #fff;
+      border-radius: 16px;
+      padding: 24px 20px 28px;
+      box-shadow: 0 12px 30px rgba(0,0,0,.06);
+      position: relative;
+    }
+    h1 {
+      font-size: 22px;
+      margin: 0 0 4px;
+      text-align: center;
+    }
+    .subtitle {
+      text-align: center;
+      font-size: 13px;
+      color: #777;
+      margin-bottom: 18px;
+    }
+    .admin-bar {
+      position: absolute;
+      top: 16px;
+      right: 18px;
+      font-size: 12px;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      color: #666;
+    }
+    .admin-name {
+      font-size: 12px;
+      color: #555;
+    }
+    .grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 16px 20px;
+    }
+    @media (max-width: 768px) {
+      .grid {
+        grid-template-columns: 1fr;
+      }
+      .admin-bar {
+        position: static;
+        justify-content: flex-end;
+        margin-bottom: 6px;
+      }
+    }
+    label {
+      display: block;
+      font-size: 14px;
+      margin-bottom: 4px;
+      color: #333;
+    }
+    input, select {
+      width: 100%;
+      box-sizing: border-box;
+      padding: 8px 10px;
+      font-size: 14px;
+      border-radius: 8px;
+      border: 1px solid #d0d0d5;
+      outline: none;
+      transition: border-color 0.15s, box-shadow 0.15s;
+      background: #fafafa;
+    }
+    input:focus, select:focus {
+      border-color: #0070f3;
+      box-shadow: 0 0 0 1px rgba(0,112,243,.2);
+      background: #fff;
+    }
+    .hint {
+      font-size: 12px;
+      color: #999;
+      margin-top: 2px;
+    }
+    .inline-time {
+      display: grid;
+      grid-template-columns: 1fr 1fr 1fr;
+      gap: 6px;
+    }
+    @media (max-width: 640px) {
+      .inline-time {
+        grid-template-columns: 1fr;
+      }
+    }
+    .time-field {
+      display: flex;
+      align-items: center;
+      gap: 4px;
+    }
+    .time-field span {
+      font-size: 13px;
+      color: #555;
+      white-space: nowrap;
+    }
+    .time-field input {
+      flex: 1;
+    }
+    .actions {
+      margin-top: 20px;
+      display: flex;
+      justify-content: center;
+      gap: 12px;
+      flex-wrap: wrap;
+    }
+    button {
+      border: none;
+      border-radius: 999px;
+      padding: 9px 20px;
+      font-size: 14px;
+      cursor: pointer;
+      background: #0070f3;
+      color: #fff;
+      font-weight: 500;
+      box-shadow: 0 6px 14px rgba(0,112,243,.25);
+      transition: transform 0.1s, box-shadow 0.1s, background 0.1s;
+    }
+    button:hover {
+      transform: translateY(-1px);
+      box-shadow: 0 10px 20px rgba(0,112,243,.28);
+      background: #005ad1;
+    }
+    button.secondary {
+      background: #e5e7eb;
+      color: #333;
+      box-shadow: none;
+    }
+    button.secondary:hover {
+      background: #d1d5db;
+      box-shadow: none;
+      transform: none;
+    }
+    .mini-btn {
+      border-radius: 999px;
+      border: none;
+      padding: 4px 10px;
+      font-size: 12px;
+      cursor: pointer;
+      background: #e5e7eb;
+      color: #333;
+    }
+    .mini-btn:hover {
+      background: #d1d5db;
+    }
+    .result {
+      margin-top: 22px;
+      padding-top: 18px;
+      border-top: 1px solid #eee;
+    }
+    .result h2 {
+      font-size: 18px;
+      margin: 0 0 10px;
+    }
+    .result-main {
+      font-size: 22px;
+      font-weight: 600;
+      margin-bottom: 8px;
+    }
+    .result-main span {
+      font-size: 16px;
+      font-weight: 400;
+      color: #555;
+      margin-left: 8px;
+    }
+    .result-detail {
+      font-size: 13px;
+      color: #555;
+      line-height: 1.6;
+      background: #fafafa;
+      padding: 10px 12px;
+      border-radius: 10px;
+      white-space: pre-line;
+    }
+    .badge {
+      display: inline-block;
+      font-size: 11px;
+      padding: 2px 7px;
+      border-radius: 999px;
+      background: #eff6ff;
+      color: #1d4ed8;
+      margin-left: 6px;
+    }
+    .settings {
+      margin-top: 28px;
+      padding-top: 18px;
+      border-top: 1px dashed #e5e7eb;
+    }
+    .settings h3 {
+      font-size: 16px;
+      margin: 0 0 8px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 8px;
+      flex-wrap: wrap;
+    }
+    .settings small {
+      font-size: 12px;
+      color: #888;
+    }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 13px;
+      margin-bottom: 12px;
+    }
+    th, td {
+      border-bottom: 1px solid #f0f0f0;
+      padding: 6px 4px;
+      text-align: left;
+      vertical-align: middle;
+    }
+    th {
+      color: #666;
+      font-weight: 500;
+    }
+    td input {
+      width: 100%;
+      padding: 5px 6px;
+      font-size: 13px;
+      border-radius: 6px;
+      border: 1px solid #d0d0d5;
+      background: #fafafa;
+      box-sizing: border-box;
+    }
+    .inline-config {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 10px;
+      margin: 10px 0 6px;
+    }
+    @media (max-width: 768px) {
+      .inline-config {
+        grid-template-columns: 1fr;
+      }
+    }
+    .vendor-filter {
+      margin: 4px 0 6px;
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: 6px;
+      font-size: 13px;
+    }
+    .vendor-filter label {
+      margin: 0;
+      font-size: 13px;
+    }
+    .vendor-filter select,
+    .vendor-filter input {
+      width: auto;
+      min-width: 140px;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <!-- 管理员栏 -->
+    <div class="admin-bar">
+      <span class="admin-name" id="adminName"></span>
+      <button type="button" class="mini-btn" id="adminAuthBtn">管理员登录</button>
+    </div>
+
+    <h1>3D 打印报价计算器</h1>
+    <div class="subtitle">根据切片结果快速估算：材料 + 设备 + 后处理 + 利润</div>
+
+    <!-- 报价表单 -->
+    <form id="quote-form">
+      <div class="grid">
+        <!-- 材料选择：厂商 + 型号 -->
+        <div>
+          <label>材料厂商</label>
+          <select id="materialVendor"></select>
+
+          <label style="margin-top:6px; display:block;">材料型号 / 名称</label>
+          <select id="material" required></select>
+
+          <div class="hint">先选厂商，再选材料型号。材料列表请联系管理员维护。</div>
+        </div>
+
+        <div>
+          <label for="weight">单件耗材重量（g）</label>
+          <input id="weight" type="number" step="0.01" min="0" required />
+          <div class="hint">支持到 0.01 g（从切片软件中查看耗材用量）。</div>
+        </div>
+
+        <!-- 打印时间与设备 -->
+        <div>
+          <label>单件打印时间</label>
+          <div class="inline-time">
+            <div class="time-field">
+              <input id="printDays" type="number" step="1" min="0" />
+              <span>天</span>
+            </div>
+            <div class="time-field">
+              <input id="printHours" type="number" step="1" min="0" />
+              <span>小时</span>
+            </div>
+            <div class="time-field">
+              <input id="printMinutes" type="number" step="1" min="0" />
+              <span>分钟</span>
+            </div>
+          </div>
+          <div class="hint">可只填小时或分钟，也可以三项一起填，将自动折算为总小时。</div>
+        </div>
+
+        <div>
+          <label>设备厂商</label>
+          <select id="machineVendor"></select>
+
+          <label style="margin-top:6px; display:block;">设备型号 / 名称</label>
+          <select id="machine" required></select>
+
+          <div class="hint">设备列表在下方“设备设置”中维护。</div>
+        </div>
+
+        <!-- 后处理与数量 -->
+        <div>
+          <label for="postProcess">后处理等级</label>
+          <select id="postProcess" required>
+            <option value="NONE">无</option>
+            <option value="BASIC">基础处理（去支撑、简单打磨）</option>
+            <option value="FINE">精细处理（打磨、上色等）</option>
+          </select>
+        </div>
+
+        <div>
+          <label for="quantity">数量（件）</label>
+          <input id="quantity" type="number" step="1" min="1" value="1" required />
+        </div>
+
+        <!-- 临时参数（只影响本次计算） -->
+        <div>
+          <label for="customMargin">利润率（本次，%）</label>
+          <input id="customMargin" type="number" step="1" min="0" placeholder="留空则用默认配置" />
+          <div class="hint">默认3% ，例如 3 表示加 3% 利润。</div>
+        </div>
+
+        <div>
+          <label for="customMin">单件最低价（本次，元）</label>
+          <input id="customMin" type="number" step="0.1" min="0" placeholder="留空则用默认配置" />
+          <div class="hint">用于限制最小单价，防止小零件过低。</div>
+        </div>
+      </div>
+
+      <div class="actions">
+        <button type="submit">计算报价</button>
+        <button type="button" class="secondary" id="resetBtn">清空</button>
+        <button type="button" class="secondary" id="exportBtn">导出报价单</button>
+      </div>
+    </form>
+
+    <!-- 报价结果 -->
+    <div class="result" id="result" style="display:none;">
+      <h2>报价结果 <span class="badge">内部试算</span></h2>
+      <div class="result-main" id="result-total"></div>
+      <div class="result-detail" id="result-detail"></div>
+    </div>
+
+    <!-- 管理员设置区域（登录后可见） -->
+    <div class="settings" id="settingsSection" style="display:none;">
+      <h3>
+        全局参数
+        <div>
+          <button type="button" class="mini-btn" id="changePasswordBtn">修改管理员密码</button>
+          <button type="button" class="mini-btn" id="saveSettingsBtn">保存设置到服务器</button>
+        </div>
+      </h3>
+      <small>这里的参数作为默认值，影响所有报价；保存后对所有用户生效。</small>
+      <div class="inline-config">
+        <div>
+          <label for="configProfitMargin">默认利润率（%）</label>
+          <input id="configProfitMargin" type="number" step="1" min="0" />
+        </div>
+        <div>
+          <label for="configMinPrice">默认单件最低价（元）</label>
+          <input id="configMinPrice" type="number" step="0.1" min="0" />
+        </div>
+        <div>
+          <label for="configSetupFee">开机/调机费（元/订单）</label>
+          <input id="configSetupFee" type="number" step="0.1" min="0" />
+        </div>
+      </div>
+
+            <!-- 全局成本设置（新增） -->
+      <h3>全局成本设置</h3>
+      <small>用于计算设备小时成本：折旧 + 电费 + 人工 + 杂项。</small>
+      <div class="inline-config">
+        <div>
+          <label for="configElectricityPrice">电价（元 / kWh）</label>
+          <input id="configElectricityPrice" type="number" step="0.01" min="0" />
+        </div>
+        <div>
+          <label for="configLaborHourly">操作人工成本（元 / 小时）</label>
+          <input id="configLaborHourly" type="number" step="0.1" min="0" />
+        </div>
+        <div>
+          <label for="configMachinesPerOperator">每名操作员负责设备数量（台）</label>
+          <input id="configMachinesPerOperator" type="number" step="1" min="1" />
+        </div>
+        <div>
+          <label for="configOverheadPerMachine">杂项成本（元 / 台·小时）</label>
+          <input id="configOverheadPerMachine" type="number" step="0.1" min="0" />
+        </div>
+      </div>
+
+
+
+      <!-- 材料设置 -->
+      <h3 style="display:flex;justify-content:space-between;align-items:center;">
+        材料设置
+      </h3>
+      <div class="vendor-filter">
+        <label>当前材料厂商：</label>
+        <select id="materialsVendorFilter"></select>
+        <input id="newMaterialVendorInput" type="text" placeholder="新厂商名称" />
+        <button type="button" class="mini-btn" id="addMaterialVendorBtn">添加厂商</button>
+      </div>
+      <small>单位：元 / kg。这里的内容会同步到上面的材料厂商/型号下拉框。</small>
+      <table>
+        <thead>
+          <tr>
+            <th style="width:22%;">厂商</th>
+            <th style="width:38%;">材料名称</th>
+            <th style="width:20%;">单价（元 / kg）</th>
+            <th style="width:10%;">操作</th>
+          </tr>
+        </thead>
+        <tbody id="materialsTableBody"></tbody>
+      </table>
+      <h3 style="display:flex;justify-content:space-between;align-items:center;">
+        -
+        <button id="addMaterialBtn" class="btn-sub">新增材料</button>
+      </h3>
+              
+
+
+      <!-- 设备设置 -->
+      <h3 style="display:flex;justify-content:space-between;align-items:center;">
+        设备设置
+      </h3>
+
+      <div class="vendor-filter">
+        <label>当前设备厂商：</label>
+        <select id="machinesVendorFilter"></select>
+        <input id="newMachineVendorInput" type="text" placeholder="新厂商名称" />
+        <button type="button" class="mini-btn" id="addMachineVendorBtn">添加厂商</button>
+      </div>
+      <small>
+        单位：元 / 小时。可以填写设备价格和折旧年限，点击“算”自动计算小时成本：<br />
+        简单公式：小时成本 ≈ 设备价格 ÷（年限 × 12 × 每月工作小时）。如需包含电费 / 人工等，可在算出的基础上手动微调。
+      </small>
+      <table>
+        <thead>
+          <tr>
+            <th style="width:16%;">厂商</th>
+            <th style="width:24%;">设备名称</th>
+            <th style="width:14%;">设备价（元）</th>
+            <th style="width:12%;">折旧年限（年）</th>
+            <th style="width:14%;">月工时（小时）</th>
+            <th style="width:10%;">功率（W）</th>
+            <th style="width:12%;">小时成本（元）</th>
+            <th style="width:8%;">操作</th>
+          </tr>
+        </thead>
+        <tbody id="machinesTableBody"></tbody>
+      </table>
+      <h3 style="display:flex;justify-content:space-between;align-items:center;">
+        -
+        <button id="addMachineBtn" class="btn-sub">新增设备</button>
+      </h3>
+    </div>
+  </div>
+
+  <script>
+    // ===== API 地址：这里改成你的后端地址 =====
+    const API_BASE = "http://10.1.1.21:8000/api";
+
+    const CLIENT_DEFAULTS = {
+      defaultProfitMargin: 0.4,
+      defaultMinPricePerPart: 15,
+      setupFee: 10,
+      electricityPrice: 0.8,          // 电价 元/kWh
+      laborHourlyCost: 0.5,           // 操作人工成本 元/小时
+      machinesPerOperator: 1,         // 每人看几台设备
+      overheadHourlyPerMachine: 0,    // 杂项成本 元/台·小时
+
+      materials: [
+        { vendor: "通用", name: "PLA", pricePerKg: 120 },
+        { vendor: "通用", name: "PETG", pricePerKg: 150 },
+        { vendor: "通用", name: "ABS", pricePerKg: 160 },
+        { vendor: "通用", name: "光固化树脂", pricePerKg: 220 }
+      ],
+      machines: [
+        { vendor: "Bambu Lab", name: "A1C/通用桌面机", hourlyRate: 10, price: null, expectedLifeYears: null, expectedMonthlyHours: null },
+        { vendor: "Bambu Lab", name: "P1S/工业机", hourlyRate: 25, price: null, expectedLifeYears: null, expectedMonthlyHours: null }
+      ],
+      postProcess: {
+        NONE:  { name: "无",     costPerPart: 0 },
+        BASIC: { name: "基础",   costPerPart: 5 },
+        FINE:  { name: "精细",   costPerPart: 20 }
+      }
+    };
+
+    let runtimeConfig = JSON.parse(JSON.stringify(CLIENT_DEFAULTS));
+    let lastQuote = null;
+
+    const ADMIN_SESSION_KEY = "quote_admin_session";
+    let adminSessionToken = localStorage.getItem(ADMIN_SESSION_KEY) || null;
+    let isAdmin = false;
+    let adminUsername = "";
+
+    let currentMaterialsVendor = "";
+    let currentMachinesVendor = "";
+
+    function formatMoney(v) {
+      return "¥" + v.toFixed(2);
+    }
+
+    // ===== 材料 / 设备：表格数据读取 =====
+    function getMaterialsFromTable() {
+      const rows = document.querySelectorAll("#materialsTableBody tr");
+      const arr = [];
+      rows.forEach(row => {
+        const vendorInput = row.querySelector(".mat-vendor");
+        const nameInput = row.querySelector(".mat-name");
+        const priceInput = row.querySelector(".mat-price");
+        const vendor = (vendorInput.value || "").trim() || "未分类";
+        const name = (nameInput.value || "").trim();
+        const price = parseFloat(priceInput.value);
+        if (name && !isNaN(price) && price >= 0) {
+          arr.push({ vendor, name, pricePerKg: price });
+        }
+      });
+      return arr;
+    }
+
+    function getMachinesFromTable() {
+      const rows = document.querySelectorAll("#machinesTableBody tr");
+      const arr = [];
+      rows.forEach(row => {
+        const vendorInput = row.querySelector(".mac-vendor");
+        const nameInput   = row.querySelector(".mac-name");
+        const priceInput  = row.querySelector(".mac-price");
+        const lifeInput   = row.querySelector(".mac-life");
+        const monthInput  = row.querySelector(".mac-monthly");
+        const powerInput  = row.querySelector(".mac-power");
+        const rateInput   = row.querySelector(".mac-rate");
+
+        const vendor = (vendorInput.value || "").trim() || "未分类";
+        const name   = (nameInput.value || "").trim();
+
+        const hourlyRate = parseFloat(rateInput.value);
+        const price      = parseFloat(priceInput.value);
+        const life       = parseFloat(lifeInput.value);
+        const monthH     = parseFloat(monthInput.value);
+        const power      = parseFloat(powerInput.value);
+
+        // 没填名字就跳过这一行
+        if (!name) return;
+
+        arr.push({
+          vendor,
+          name,
+          // 如果没填或小于 0，就按 0 处理
+          hourlyRate: isNaN(hourlyRate) || hourlyRate < 0 ? 0 : hourlyRate,
+          // 这些字段给后端，如果没填或 <=0，就用 null
+          price: isNaN(price) || price <= 0 ? null : price,
+          expectedLifeYears: isNaN(life) || life <= 0 ? null : life,
+          expectedMonthlyHours: isNaN(monthH) || monthH <= 0 ? null : monthH,
+          powerW: isNaN(power) || power <= 0 ? null : power
+        });
+      });
+      return arr;
+    }
+
+
+    // ===== 材料 / 设备：表格构造 =====
+    function appendMaterialRow(vendor = "", name = "", pricePerKg = "") {
+      const tbody = document.getElementById("materialsTableBody");
+      const tr = document.createElement("tr");
+      tr.innerHTML = `
+        <td><input type="text" class="mat-vendor" value="${vendor}"></td>
+        <td><input type="text" class="mat-name" value="${name}"></td>
+        <td><input type="number" class="mat-price" step="0.1" min="0" value="${pricePerKg}"></td>
+        <td><button type="button" class="mini-btn mat-delete">删</button></td>
+      `;
+      tbody.appendChild(tr);
+
+      tr.querySelector(".mat-delete").addEventListener("click", () => {
+        tr.remove();
+        rebuildMaterialsVendorFilter();
+        rebuildMaterialOptions();
+      });
+      tr.querySelectorAll("input").forEach(input => {
+        input.addEventListener("input", () => {
+          rebuildMaterialsVendorFilter();
+          rebuildMaterialOptions();
+        });
+      });
+    }
+
+    function recalcMachineHourlyFromRow(tr, silent = false) {
+      const priceInput  = tr.querySelector(".mac-price");
+      const lifeInput   = tr.querySelector(".mac-life");
+      const monthInput  = tr.querySelector(".mac-monthly");
+      const powerInput  = tr.querySelector(".mac-power");
+      const rateInput   = tr.querySelector(".mac-rate");
+
+      const price  = parseFloat(priceInput.value);
+      const life   = parseFloat(lifeInput.value);
+      const monthH = parseFloat(monthInput.value);
+      const power  = parseFloat(powerInput.value);
+
+      // 全局成本参数
+      const elecPrice = parseFloat(document.getElementById("configElectricityPrice").value) || 0;
+      const laborCost = parseFloat(document.getElementById("configLaborHourly").value) || 0;
+      let machinesPerOp = parseFloat(document.getElementById("configMachinesPerOperator").value);
+      if (isNaN(machinesPerOp) || machinesPerOp <= 0) machinesPerOp = 1;
+      const overhead = parseFloat(document.getElementById("configOverheadPerMachine").value) || 0;
+
+      if (
+        isNaN(price) || price <= 0 ||
+        isNaN(life)  || life  <= 0 ||
+        isNaN(monthH)|| monthH<= 0
+      ) {
+        if (!silent) {
+          alert("请先填写有效的设备价、折旧年限和每月工时。");
+        }
+        return;
+      }
+
+      const totalHours = life * 12 * monthH;
+      const depreciation = price / totalHours;                 // 折旧
+
+      const elec = (!isNaN(power) && power > 0)
+        ? (power / 1000) * elecPrice                          // 功率 * 电价
+        : 0;
+
+      const labor = laborCost / machinesPerOp;                 // 人工成本/台
+      const rate  = depreciation + elec + labor + overhead;    // 总小时成本
+
+      rateInput.value = rate.toFixed(1);
+    }
+
+
+    function appendMachineRow(
+      vendor = "",
+      name = "",
+      hourlyRate = "",
+      price = "",
+      life = "",
+      monthH = "",
+      powerW = ""
+    ) {
+      const tbody = document.getElementById("machinesTableBody");
+      const tr = document.createElement("tr");
+      tr.innerHTML = `
+        <td><input type="text"   class="mac-vendor"  value="${vendor}"></td>
+        <td><input type="text"   class="mac-name"    value="${name}"></td>
+        <td><input type="number" class="mac-price"   step="0.1" min="0" value="${price}"></td>
+        <td><input type="number" class="mac-life"    step="0.1" min="0" value="${life}"></td>
+        <td><input type="number" class="mac-monthly" step="1"   min="0" value="${monthH}"></td>
+        <td><input type="number" class="mac-power"   step="1"   min="0" value="${powerW}"></td>
+        <td>
+          <div style="display:flex;align-items:center;gap:4px;">
+            <input type="number" class="mac-rate" step="0.1" min="0" value="${hourlyRate}">
+            <button type="button" class="mini-btn mac-calc">算</button>
+          </div>
+        </td>
+        <td><button type="button" class="mini-btn mac-delete">删</button></td>
+      `;
+      tbody.appendChild(tr);
+
+      // 删除按钮
+      tr.querySelector(".mac-delete").addEventListener("click", () => {
+        tr.remove();
+        rebuildMachinesVendorFilter();
+        rebuildMachineOptions();
+      });
+
+      // “算”按钮（调用我们前面写的计算小时成本函数）
+      tr.querySelector(".mac-calc").addEventListener("click", () => {
+        recalcMachineHourlyFromRow(tr, false);
+      });
+
+      // 任意输入变化时，刷新厂商下拉 + 前台下拉
+      tr.querySelectorAll("input").forEach(input => {
+        input.addEventListener("input", () => {
+          rebuildMachinesVendorFilter();
+          rebuildMachineOptions();
+          // 注意：这里只刷新 UI，不自动覆盖小时成本，避免你手动改被覆盖
+        });
+      });
+    }
+
+
+    // ===== 设置区：厂商过滤 & 新增厂商 =====
+    function rebuildMaterialsVendorFilter() {
+      const materials = getMaterialsFromTable();
+      const select = document.getElementById("materialsVendorFilter");
+      const prev = currentMaterialsVendor || select.value;
+
+      let vendors = [...new Set(materials.map(m => m.vendor))];
+      if (vendors.length === 0) {
+        vendors = ["未分类"];
+      }
+
+      select.innerHTML = "";
+      vendors.forEach(v => {
+        const opt = document.createElement("option");
+        opt.value = v;
+        opt.textContent = v;
+        select.appendChild(opt);
+      });
+
+      currentMaterialsVendor = vendors.includes(prev) ? prev : vendors[0];
+      select.value = currentMaterialsVendor;
+
+      // 只显示当前厂商的行
+      const rows = document.querySelectorAll("#materialsTableBody tr");
+      rows.forEach(row => {
+        const vInput = row.querySelector(".mat-vendor");
+        const v = (vInput.value || "").trim() || "未分类";
+        row.style.display = v === currentMaterialsVendor ? "" : "none";
+      });
+    }
+
+    function rebuildMachinesVendorFilter() {
+      const machines = getMachinesFromTable();
+      const select = document.getElementById("machinesVendorFilter");
+      const prev = currentMachinesVendor || select.value;
+
+      let vendors = [...new Set(machines.map(m => m.vendor))];
+      if (vendors.length === 0) {
+        vendors = ["未分类"];
+      }
+
+      select.innerHTML = "";
+      vendors.forEach(v => {
+        const opt = document.createElement("option");
+        opt.value = v;
+        opt.textContent = v;
+        select.appendChild(opt);
+      });
+
+      currentMachinesVendor = vendors.includes(prev) ? prev : vendors[0];
+      select.value = currentMachinesVendor;
+
+      const rows = document.querySelectorAll("#machinesTableBody tr");
+      rows.forEach(row => {
+        const vInput = row.querySelector(".mac-vendor");
+        const v = (vInput.value || "").trim() || "未分类";
+        row.style.display = v === currentMachinesVendor ? "" : "none";
+      });
+    }
+
+    document.getElementById("materialsVendorFilter").addEventListener("change", () => {
+      currentMaterialsVendor = document.getElementById("materialsVendorFilter").value;
+      rebuildMaterialsVendorFilter();
+      rebuildMaterialOptions();
+    });
+    document.getElementById("machinesVendorFilter").addEventListener("change", () => {
+      currentMachinesVendor = document.getElementById("machinesVendorFilter").value;
+      rebuildMachinesVendorFilter();
+      rebuildMachineOptions();
+    });
+
+    document.getElementById("addMaterialVendorBtn").addEventListener("click", () => {
+      const input = document.getElementById("newMaterialVendorInput");
+      const name = (input.value || "").trim();
+      if (!name) return;
+
+      currentMaterialsVendor = name;
+      input.value = "";
+
+      // ⭐ 新增：自动添加一行材料，避免空 vendor 无数据
+      appendMaterialRow(name, "", "");
+
+      rebuildMaterialsVendorFilter();
+      rebuildMaterialOptions();
+    });
+
+
+    document.getElementById("addMachineVendorBtn").addEventListener("click", () => {
+      const input = document.getElementById("newMachineVendorInput");
+      const name = (input.value || "").trim();
+      if (!name) return;
+
+      currentMachinesVendor = name;
+      input.value = "";
+
+      // ⭐ 新增：自动添加一行设备，避免厂商没有设备行
+      appendMachineRow(name, "", "", "", "", "", "");
+
+      rebuildMachinesVendorFilter();
+      rebuildMachineOptions();
+    });
+
+
+    // ===== 报价区域下拉：根据当前表格重建 options =====
+    function rebuildMaterialOptions() {
+      const materials = getMaterialsFromTable();
+      const vendorSelect = document.getElementById("materialVendor");
+      const matSelect = document.getElementById("material");
+
+      const vendors = [...new Set(materials.map(m => m.vendor))];
+      const prevVendor = vendorSelect.value;
+      vendorSelect.innerHTML = "";
+      vendors.forEach(v => {
+        const opt = document.createElement("option");
+        opt.value = v;
+        opt.textContent = v;
+        vendorSelect.appendChild(opt);
+      });
+      if (vendors.length > 0) {
+        vendorSelect.value = vendors.includes(prevVendor) ? prevVendor : vendors[0];
+      }
+
+      const currentVendor = vendorSelect.value;
+      matSelect.innerHTML = "";
+      materials.forEach((m, idx) => {
+        if (m.vendor === currentVendor) {
+          const opt = document.createElement("option");
+          opt.value = String(idx);
+          opt.textContent = m.name;
+          matSelect.appendChild(opt);
+        }
+      });
+    }
+
+    function rebuildMachineOptions() {
+      const machines = getMachinesFromTable();
+      const vendorSelect = document.getElementById("machineVendor");
+      const macSelect = document.getElementById("machine");
+
+      const vendors = [...new Set(machines.map(m => m.vendor))];
+      const prevVendor = vendorSelect.value;
+      vendorSelect.innerHTML = "";
+      vendors.forEach(v => {
+        const opt = document.createElement("option");
+        opt.value = v;
+        opt.textContent = v;
+        vendorSelect.appendChild(opt);
+      });
+      if (vendors.length > 0) {
+        vendorSelect.value = vendors.includes(prevVendor) ? prevVendor : vendors[0];
+      }
+
+      const currentVendor = vendorSelect.value;
+      macSelect.innerHTML = "";
+      machines.forEach((m, idx) => {
+        if (m.vendor === currentVendor) {
+          const opt = document.createElement("option");
+          opt.value = String(idx);
+          opt.textContent = m.name;
+          macSelect.appendChild(opt);
+        }
+      });
+    }
+
+    document.getElementById("materialVendor").addEventListener("change", rebuildMaterialOptions);
+    document.getElementById("machineVendor").addEventListener("change", rebuildMachineOptions);
+
+    function initSettingsFromRuntime() {
+      document.getElementById("materialsTableBody").innerHTML = "";
+      document.getElementById("machinesTableBody").innerHTML = "";
+
+      runtimeConfig.materials.forEach(m => appendMaterialRow(m.vendor, m.name, m.pricePerKg));
+      runtimeConfig.machines.forEach(m => {
+        appendMachineRow(
+          m.vendor,
+          m.name,
+          m.hourlyRate,
+          m.price ?? "",
+          m.expectedLifeYears ?? "",
+          m.expectedMonthlyHours ?? "",
+          m.powerW ?? ""
+        );
+      });
+
+
+      rebuildMaterialsVendorFilter();
+      rebuildMachinesVendorFilter();
+      rebuildMaterialOptions();
+      rebuildMachineOptions();
+
+      document.getElementById("configProfitMargin").value = (runtimeConfig.defaultProfitMargin * 100).toFixed(0);
+      document.getElementById("configMinPrice").value = runtimeConfig.defaultMinPricePerPart.toString();
+      document.getElementById("configSetupFee").value = runtimeConfig.setupFee.toString();
+      document.getElementById("configElectricityPrice").value = (runtimeConfig.electricityPrice ?? CLIENT_DEFAULTS.electricityPrice).toString();
+      document.getElementById("configLaborHourly").value = (runtimeConfig.laborHourlyCost ?? CLIENT_DEFAULTS.laborHourlyCost).toString();
+      document.getElementById("configMachinesPerOperator").value = (runtimeConfig.machinesPerOperator ?? CLIENT_DEFAULTS.machinesPerOperator).toString();
+      document.getElementById("configOverheadPerMachine").value = (runtimeConfig.overheadHourlyPerMachine ?? CLIENT_DEFAULTS.overheadHourlyPerMachine).toString();
+
+          }
+
+    async function loadSettingsFromServer() {
+      try {
+        const resp = await fetch(`${API_BASE}/settings`);
+        if (!resp.ok) throw new Error("HTTP " + resp.status);
+        const data = await resp.json();
+        runtimeConfig.defaultProfitMargin = data.defaultProfitMargin;
+        runtimeConfig.defaultMinPricePerPart = data.defaultMinPricePerPart;
+        runtimeConfig.setupFee = data.setupFee;
+        runtimeConfig.materials = data.materials;
+        runtimeConfig.machines = data.machines;
+        runtimeConfig.electricityPrice = data.electricityPrice ?? CLIENT_DEFAULTS.electricityPrice;
+        runtimeConfig.laborHourlyCost = data.laborHourlyCost ?? CLIENT_DEFAULTS.laborHourlyCost;
+        runtimeConfig.machinesPerOperator =  data.machinesPerOperator ?? CLIENT_DEFAULTS.machinesPerOperator;
+        runtimeConfig.overheadHourlyPerMachine = data.overheadHourlyPerMachine ?? CLIENT_DEFAULTS.overheadHourlyPerMachine;
+
+      } catch (e) {
+        console.warn("加载服务器设置失败，使用前端默认值:", e);
+      }
+      initSettingsFromRuntime();
+    }
+
+    // ===== 管理员登录 / 状态 =====
+    function updateAdminUI() {
+      const settingsSection = document.getElementById("settingsSection");
+      const adminBtn = document.getElementById("adminAuthBtn");
+      const adminNameSpan = document.getElementById("adminName");
+
+      if (isAdmin) {
+        settingsSection.style.display = "";
+        adminBtn.textContent = "退出登录";
+        adminNameSpan.textContent = adminUsername ? `已登录：${adminUsername}` : "已登录";
+      } else {
+        settingsSection.style.display = "none";
+        adminBtn.textContent = "管理员登录";
+        adminNameSpan.textContent = "";
+      }
+    }
+
+    async function checkAdminStatus() {
+      if (!adminSessionToken) {
+        isAdmin = false;
+        adminUsername = "";
+        updateAdminUI();
+        return;
+      }
+      try {
+        const resp = await fetch(`${API_BASE}/admin/status`, {
+          headers: { "X-Admin-Session": adminSessionToken }
+        });
+        if (!resp.ok) throw new Error("HTTP " + resp.status);
+        const data = await resp.json();
+        if (data.authenticated) {
+          isAdmin = true;
+          adminUsername = data.username || "";
+        } else {
+          isAdmin = false;
+          adminUsername = "";
+          adminSessionToken = null;
+          localStorage.removeItem(ADMIN_SESSION_KEY);
+        }
+      } catch (e) {
+        console.warn("检查管理员状态失败:", e);
+        isAdmin = false;
+        adminUsername = "";
+      }
+      updateAdminUI();
+    }
+
+    async function adminLoginFlow() {
+      const username = window.prompt("请输入管理员用户名：", "admin");
+      if (!username) return;
+      const password = window.prompt("请输入管理员密码：");
+      if (!password) return;
+
+      try {
+        const resp = await fetch(`${API_BASE}/admin/login`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ username, password })
+        });
+        if (!resp.ok) {
+          const err = await resp.json().catch(() => ({}));
+          throw new Error(err.detail || "登录失败");
+        }
+        const data = await resp.json();
+        adminSessionToken = data.token;
+        adminUsername = data.username;
+        isAdmin = true;
+        localStorage.setItem(ADMIN_SESSION_KEY, adminSessionToken);
+        updateAdminUI();
+        alert("登录成功");
+      } catch (e) {
+        alert("登录失败：" + e.message);
+      }
+    }
+
+    async function adminLogoutFlow() {
+      if (!adminSessionToken) {
+        isAdmin = false;
+        adminUsername = "";
+        updateAdminUI();
+        return;
+      }
+      try {
+        await fetch(`${API_BASE}/admin/logout`, {
+          method: "POST",
+          headers: { "X-Admin-Session": adminSessionToken }
+        });
+      } catch (e) {
+        console.warn("登出请求失败：", e);
+      }
+      adminSessionToken = null;
+      isAdmin = false;
+      adminUsername = "";
+      localStorage.removeItem(ADMIN_SESSION_KEY);
+      updateAdminUI();
+    }
+
+    document.getElementById("adminAuthBtn").addEventListener("click", () => {
+      if (isAdmin) {
+        adminLogoutFlow();
+      } else {
+        adminLoginFlow();
+      }
+    });
+
+    // ===== 保存设置 & 修改密码 =====
+    async function saveSettingsToServer() {
+      if (!isAdmin || !adminSessionToken) {
+        alert("请先以管理员身份登录。");
+        return;
+      }
+
+      const materials = getMaterialsFromTable();
+      const machines = getMachinesFromTable();
+      if (materials.length === 0) {
+        alert("请至少配置一个材料");
+        return;
+      }
+      if (machines.length === 0) {
+        alert("请至少配置一台设备");
+        return;
+      }
+
+      let pMargin = parseFloat(document.getElementById("configProfitMargin").value);
+      if (isNaN(pMargin) || pMargin < 0) pMargin = 0;
+      const profit = pMargin / 100;
+
+      let minPrice = parseFloat(document.getElementById("configMinPrice").value);
+      if (isNaN(minPrice) || minPrice < 0) minPrice = 0;
+
+      let setupFee = parseFloat(document.getElementById("configSetupFee").value);
+      if (isNaN(setupFee) || setupFee < 0) setupFee = 0;
+
+      /* ===== 新增：全局成本参数 + 简单前端校验 ===== */
+
+      // 1. 电价（元/kWh）
+      const eleInput = document.getElementById("configElectricityPrice");
+      let electricityPrice = parseFloat(eleInput?.value);
+      if (isNaN(electricityPrice) || electricityPrice < 0) {
+        alert("电价（元/kWh）请输入 0 或以上的数字");
+        eleInput && eleInput.focus();
+        return;
+      }
+
+      // 2. 操作人工成本（元/小时）
+      const laborInput = document.getElementById("configLaborHourly");
+      let laborHourlyCost = parseFloat(laborInput?.value);
+      if (isNaN(laborHourlyCost) || laborHourlyCost < 0) {
+        alert("操作人工成本（元/小时）请输入 0 或以上的数字");
+        laborInput && laborInput.focus();
+        return;
+      }
+
+      // 3. 每人负责设备数量（台）
+      const mpoInput = document.getElementById("configMachinesPerOperator");
+      let machinesPerOperator = parseFloat(mpoInput?.value);
+      if (isNaN(machinesPerOperator) || machinesPerOperator <= 0) {
+        alert("每人负责设备数量请输入大于 0 的数字");
+        mpoInput && mpoInput.focus();
+        return;
+      }
+
+      // 4. 杂项成本（元/台·小时）
+      const ohInput = document.getElementById("configOverheadPerMachine");
+      let overheadHourlyPerMachine = parseFloat(ohInput?.value);
+      if (isNaN(overheadHourlyPerMachine) || overheadHourlyPerMachine < 0) {
+        alert("杂项成本（元/台·小时）请输入 0 或以上的数字");
+        ohInput && ohInput.focus();
+        return;
+      }
+
+
+      const payload = {
+        materials,
+        machines,
+        defaultProfitMargin: profit,
+        defaultMinPricePerPart: minPrice,
+        setupFee: setupFee,
+        electricityPrice,
+        laborHourlyCost,
+        machinesPerOperator,
+        overheadHourlyPerMachine
+      };
+
+
+      try {
+        const resp = await fetch(`${API_BASE}/settings`, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "X-Admin-Session": adminSessionToken
+          },
+          body: JSON.stringify(payload)
+        });
+        if (resp.status === 401) {
+          isAdmin = false;
+          adminUsername = "";
+          adminSessionToken = null;
+          localStorage.removeItem(ADMIN_SESSION_KEY);
+          updateAdminUI();
+          throw new Error("未登录或会话已过期，请重新登录。");
+        }
+        if (!resp.ok) {
+          const errData = await resp.json().catch(() => ({}));
+          throw new Error(errData.detail || "保存失败");
+        }
+        const saved = await resp.json();
+        runtimeConfig.defaultProfitMargin = saved.defaultProfitMargin;
+        runtimeConfig.defaultMinPricePerPart = saved.defaultMinPricePerPart;
+        runtimeConfig.setupFee = saved.setupFee;
+        runtimeConfig.materials = saved.materials;
+        runtimeConfig.machines = saved.machines;
+        alert("设置已保存到服务器。");
+      } catch (e) {
+        alert("保存设置失败：" + e.message);
+      }
+    }
+
+    async function changeAdminPassword() {
+      if (!isAdmin || !adminSessionToken) {
+        alert("请先以管理员身份登录。");
+        return;
+      }
+      const oldPwd = window.prompt("请输入当前管理员密码：");
+      if (!oldPwd) return;
+      const newPwd = window.prompt("请输入新的管理员密码：");
+      if (!newPwd) return;
+
+      try {
+        const resp = await fetch(`${API_BASE}/admin/change-password`, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "X-Admin-Session": adminSessionToken
+          },
+          body: JSON.stringify({ oldPassword: oldPwd, newPassword: newPwd })
+        });
+        const data = await resp.json().catch(() => ({}));
+        if (!resp.ok) {
+          throw new Error(data.detail || "修改失败");
+        }
+        alert("密码已更新，请使用新密码重新登录。");
+        adminSessionToken = null;
+        isAdmin = false;
+        adminUsername = "";
+        localStorage.removeItem(ADMIN_SESSION_KEY);
+        updateAdminUI();
+      } catch (e) {
+        alert("修改密码失败：" + e.message);
+      }
+    }
+
+    document.getElementById("saveSettingsBtn").addEventListener("click", saveSettingsToServer);
+    document.getElementById("changePasswordBtn").addEventListener("click", changeAdminPassword);
+    document.getElementById("addMaterialBtn").addEventListener("click", () => {
+      const vendor = currentMaterialsVendor || "未分类";
+      appendMaterialRow(vendor, "", "");
+      rebuildMaterialsVendorFilter();
+      rebuildMaterialOptions();
+    });
+    document.getElementById("addMachineBtn").addEventListener("click", () => {
+      const vendor = currentMachinesVendor || "未分类";
+      appendMachineRow(vendor, "", "", "", "", "");
+      rebuildMachinesVendorFilter();
+      rebuildMachineOptions();
+    });
+
+    // ===== 报价计算 & 导出 =====
+    document.getElementById("quote-form").addEventListener("submit", function (e) {
+      e.preventDefault();
+
+      const materials = getMaterialsFromTable();
+      const machines = getMachinesFromTable();
+      if (materials.length === 0) {
+        alert("请先在下方“材料设置”中添加至少一个材料。");
+        return;
+      }
+      if (machines.length === 0) {
+        alert("请先在下方“设备设置”中添加至少一台设备。");
+        return;
+      }
+
+      const matIndex = parseInt(document.getElementById("material").value, 10);
+      const macIndex = parseInt(document.getElementById("machine").value, 10);
+      const material = materials[matIndex];
+      const machine = machines[macIndex];
+
+      const weight = parseFloat(document.getElementById("weight").value) || 0;
+
+      const days = parseFloat(document.getElementById("printDays").value) || 0;
+      const hours = parseFloat(document.getElementById("printHours").value) || 0;
+      const minutes = parseFloat(document.getElementById("printMinutes").value) || 0;
+      const totalHours = days * 24 + hours + minutes / 60;
+      if (totalHours <= 0) {
+        alert("请填写打印时间（至少一个大于 0 的值）。");
+        return;
+      }
+
+      const postKey = document.getElementById("postProcess").value;
+      const post = runtimeConfig.postProcess[postKey] || runtimeConfig.postProcess.NONE;
+
+      const quantity = parseInt(document.getElementById("quantity").value, 10) || 1;
+
+      const customMarginInput = document.getElementById("customMargin").value;
+      const customMinInput = document.getElementById("customMin").value;
+
+      const profitMargin = customMarginInput !== ""
+        ? (parseFloat(customMarginInput) || 0) / 100
+        : runtimeConfig.defaultProfitMargin;
+
+      const minPricePerPart = customMinInput !== ""
+        ? (parseFloat(customMinInput) || 0)
+        : runtimeConfig.defaultMinPricePerPart;
+
+      const materialCostPerPart = (weight / 1000) * material.pricePerKg;
+      const machineCostPerPart = totalHours * machine.hourlyRate;
+      const postCostPerPart = post.costPerPart;
+      const setupCostPerPart = quantity > 0 ? runtimeConfig.setupFee / quantity : runtimeConfig.setupFee;
+
+      const costSumPerPart = materialCostPerPart + machineCostPerPart + postCostPerPart + setupCostPerPart;
+      const withProfitPerPart = costSumPerPart * (1 + profitMargin);
+      const finalPricePerPart = Math.max(withProfitPerPart, minPricePerPart);
+      const totalPrice = finalPricePerPart * quantity;
+
+      const resultEl = document.getElementById("result");
+      const resultTotalEl = document.getElementById("result-total");
+      const resultDetailEl = document.getElementById("result-detail");
+
+      resultTotalEl.textContent = `${formatMoney(totalPrice)}  （共 ${quantity} 件，单件 ${formatMoney(finalPricePerPart)}）`;
+
+      const lines = [
+        `▶ 材料：${material.vendor} / ${material.name}  ${material.pricePerKg} 元/kg`,
+        `   - 单件耗材：${weight.toFixed(2)} g → 材料成本：${formatMoney(materialCostPerPart)}`,
+        `▶ 设备：${machine.vendor} / ${machine.name}  ${machine.hourlyRate} 元/小时`,
+        `   - 单件打印时间：${days} 天 ${hours} 小时 ${minutes} 分钟 ≈ ${totalHours.toFixed(2)} 小时`,
+        `   - 设备成本：${formatMoney(machineCostPerPart)}`,
+        `▶ 后处理：${post.name} → 单件后处理成本：${formatMoney(postCostPerPart)}`,
+        `▶ 上机/调机费（订单）：${formatMoney(runtimeConfig.setupFee)}  分摊后每件：${formatMoney(setupCostPerPart)}`,
+        "",
+        `▶ 单件成本小计：${formatMoney(costSumPerPart)}`,
+        `▶ 利润率：${(profitMargin * 100).toFixed(0)}%`,
+        `▶ 单件最低价：${formatMoney(minPricePerPart)}`,
+        `▶ 含利润单价：${formatMoney(withProfitPerPart)}`,
+        `▶ 最终计价单件：${formatMoney(finalPricePerPart)}`,
+        "",
+        `▶ 数量：${quantity} 件`,
+        `▶ 订单总价：${formatMoney(totalPrice)}`
+      ];
+
+      resultDetailEl.textContent = lines.join("\n");
+      resultEl.style.display = "block";
+
+      lastQuote = {
+        material,
+        machine,
+        post,
+        weight,
+        days,
+        hours,
+        minutes,
+        totalHours,
+        quantity,
+        profitMargin,
+        minPricePerPart,
+        materialCostPerPart,
+        machineCostPerPart,
+        postCostPerPart,
+        setupCostPerPart,
+        costSumPerPart,
+        withProfitPerPart,
+        finalPricePerPart,
+        totalPrice
+      };
+    });
+
+    document.getElementById("resetBtn").addEventListener("click", () => {
+      document.getElementById("quote-form").reset();
+      document.getElementById("result").style.display = "none";
+      lastQuote = null;
+    });
+
+    document.getElementById("exportBtn").addEventListener("click", () => {
+      if (!lastQuote) {
+        alert("请先计算一次报价，再导出报价单。");
+        return;
+      }
+      const now = new Date();
+      const dateStr = now.toLocaleString("zh-CN");
+      const lines = [
+        "3D 打印报价单",
+        "========================",
+        `日期：${dateStr}`,
+        "",
+        `材料：${lastQuote.material.vendor} / ${lastQuote.material.name}`,
+        `材料单价：${lastQuote.material.pricePerKg} 元/kg`,
+        `单件耗材：${lastQuote.weight.toFixed(2)} g`,
+        `材料成本（单件）：${formatMoney(lastQuote.materialCostPerPart)}`,
+        "",
+        `设备：${lastQuote.machine.vendor} / ${lastQuote.machine.name}`,
+        `设备小时成本：${lastQuote.machine.hourlyRate} 元/小时`,
+        `单件打印时间：${lastQuote.days} 天 ${lastQuote.hours} 小时 ${lastQuote.minutes} 分钟 ≈ ${lastQuote.totalHours.toFixed(2)} 小时`,
+        `设备成本（单件）：${formatMoney(lastQuote.machineCostPerPart)}`,
+        "",
+        `后处理等级：${lastQuote.post.name}`,
+        `后处理成本（单件）：${formatMoney(lastQuote.postCostPerPart)}`,
+        "",
+        `上机/调机费（订单）：${formatMoney(runtimeConfig.setupFee)}`,
+        `分摊后上机费（单件）：${formatMoney(lastQuote.setupCostPerPart)}`,
+        "",
+        `单件成本小计：${formatMoney(lastQuote.costSumPerPart)}`,
+        `利润率：${(lastQuote.profitMargin * 100).toFixed(0)}%`,
+        `单件最低价：${formatMoney(lastQuote.minPricePerPart)}`,
+        `含利润单价：${formatMoney(lastQuote.withProfitPerPart)}`,
+        `最终计价单价：${formatMoney(lastQuote.finalPricePerPart)}`,
+        "",
+        `数量：${lastQuote.quantity} 件`,
+        `订单总价：${formatMoney(lastQuote.totalPrice)}`,
+        "",
+        "（本报价仅供参考，实际价格可根据批量、颜色、工期等情况调整。）"
+      ];
+
+      const blob = new Blob([lines.join("\n")], { type: "text/plain;charset=utf-8" });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      const ts = now.toISOString().replace(/[:.]/g, "-");
+      a.href = url;
+      a.download = `3d-print-quote-${ts}.txt`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+    });
+
+    // ===== 页面初始化 =====
+    window.addEventListener("DOMContentLoaded", async () => {
+      await loadSettingsFromServer();
+      await checkAdminStatus();
+    });
+  </script>
+</body>
+</html>

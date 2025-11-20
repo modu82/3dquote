@@ -1,0 +1,14 @@
+services:
+  quote-api:
+    image: python:3.11-slim
+    container_name: quote-api
+    working_dir: /app
+    command: >
+      bash -c "pip install --no-cache-dir fastapi uvicorn[standard]
+      && uvicorn quote_api:app --host 0.0.0.0 --port 8000"
+    volumes:
+      - ./:/app           # 挂载代码
+      - ./data:/data      # 挂载配置文件目录
+    ports:
+      - "8000:8000"       # 对外暴露 8000 端口
+    restart: unless-stopped
