@@ -35,6 +35,7 @@ class Material(BaseModel):
     vendor: str          # 厂商
     name: str            # 型号/材料名
     pricePerKg: float    # 元 / kg
+    processType: str = "FDM_3D_PRINT"  # 加工类型
 
 
 class Machine(BaseModel):
@@ -45,6 +46,7 @@ class Machine(BaseModel):
     expectedLifeYears: float | None = None   # 预计使用年限（年，可选）
     expectedMonthlyHours: float | None = None  # 每月预计工作小时数（小时，可选）
     powerW: float | None = None              # 运行时平均功率（W，可选）
+    processType: str = "FDM_3D_PRINT"      # 加工类型
 
 class PostProcessRule(BaseModel):
     key: str                      # 唯一标识，比如 "NONE" / "BASIC"
@@ -95,14 +97,20 @@ class ChangePasswordRequest(BaseModel):
 
 DEFAULT_SETTINGS = Settings(
     materials=[
-        Material(vendor="通用", name="PLA", pricePerKg=120),
-        Material(vendor="通用", name="PETG", pricePerKg=150),
-        Material(vendor="通用", name="ABS",  pricePerKg=160),
-        Material(vendor="通用", name="光固化树脂", pricePerKg=220),
+        Material(vendor="通用", name="PLA", pricePerKg=120, processType="FDM_3D_PRINT"),
+        Material(vendor="通用", name="PETG", pricePerKg=150, processType="FDM_3D_PRINT"),
+        Material(vendor="通用", name="ABS",  pricePerKg=160, processType="FDM_3D_PRINT"),
+        Material(vendor="通用", name="光固化树脂", pricePerKg=220, processType="FDM_3D_PRINT"),
+        Material(vendor="通用木料", name="桦木板", pricePerKg=35, processType="WOOD_CNC"),
+        Material(vendor="通用木料", name="樱桃木板", pricePerKg=65, processType="WOOD_CNC"),
+        Material(vendor="通用石材", name="人造石板", pricePerKg=55, processType="STONE_CNC"),
+        Material(vendor="通用石材", name="花岗岩毛坯", pricePerKg=95, processType="STONE_CNC"),
     ],
     machines=[
-        Machine(vendor="Bambu Lab", name="A1C/通用桌面机", hourlyRate=10),
-        Machine(vendor="Bambu Lab", name="P1S/工业机",     hourlyRate=25),
+        Machine(vendor="Bambu Lab", name="A1C/通用桌面机", hourlyRate=10, processType="FDM_3D_PRINT"),
+        Machine(vendor="Bambu Lab", name="P1S/工业机",     hourlyRate=25, processType="FDM_3D_PRINT"),
+        Machine(vendor="通用木工", name="三轴木工雕刻机", hourlyRate=80, processType="WOOD_CNC"),
+        Machine(vendor="通用石材", name="石材数控雕刻机", hourlyRate=120, processType="STONE_CNC"),
     ],
     defaultProfitMargin=0.4,
     defaultMinPricePerPart=15.0,
@@ -153,6 +161,8 @@ def _migrate_old_material(m: dict) -> Material:
     """兼容旧版本没有 vendor 字段的材料数据"""
     if "vendor" not in m:
         m["vendor"] = "未分类"
+    if "processType" not in m:
+        m["processType"] = "FDM_3D_PRINT"
     return Material(**m)
 
 
@@ -160,6 +170,8 @@ def _migrate_old_machine(m: dict) -> Machine:
     """兼容旧版本没有 vendor 字段的设备数据"""
     if "vendor" not in m:
         m["vendor"] = "未分类"
+    if "processType" not in m:
+        m["processType"] = "FDM_3D_PRINT"
     return Machine(**m)
 
 
