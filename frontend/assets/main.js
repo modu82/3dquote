@@ -732,30 +732,36 @@ function bindAddButtons() {
 
 function bindAdminButtons() {
   document.getElementById("adminAuthBtn").addEventListener("click", async () => {
-    if (isAdmin) {
-      await fetch(`${API_BASE}/admin/logout`, { method: "POST", headers: { "X-Admin-Session": adminSessionToken || "" } });
-      adminSessionToken = null;
-      localStorage.removeItem("quote_admin_session");
-      isAdmin = false;
-      updateAdminUI();
-      return;
+    try {
+      if (isAdmin) {
+        await fetch(`${API_BASE}/admin/logout`, { method: "POST", headers: { "X-Admin-Session": adminSessionToken || "" } });
+        adminSessionToken = null;
+        localStorage.removeItem("quote_admin_session");
+        isAdmin = false;
+        updateAdminUI();
+        return;
+      }
+      const username = prompt("请输入管理员用户名", "admin");
+      const password = prompt("请输入管理员密码");
+      if (!username || !password) return;
+      const resp = await fetch(`${API_BASE}/admin/login`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ username, password })
+      });
+      if (!resp.ok) {
+        const msg = (await resp.json().catch(() => ({})))?.detail || "登录失败，请检查账号密码";
+        alert(msg);
+        return;
+      }
+      const data = await resp.json();
+      adminSessionToken = data.token;
+      localStorage.setItem("quote_admin_session", adminSessionToken);
+      await checkAdminStatus();
+    } catch (err) {
+      console.error("管理员登录失败", err);
+      alert("无法连接管理员接口，请确认后台 8000 端口可访问");
     }
-    const username = prompt("请输入管理员用户名", "admin");
-    const password = prompt("请输入管理员密码");
-    if (!username || !password) return;
-    const resp = await fetch(`${API_BASE}/admin/login`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ username, password })
-    });
-    if (!resp.ok) {
-      alert("登录失败，请检查账号密码");
-      return;
-    }
-    const data = await resp.json();
-    adminSessionToken = data.token;
-    localStorage.setItem("quote_admin_session", adminSessionToken);
-    await checkAdminStatus();
   });
 
   document.getElementById("saveSettingsBtn").addEventListener("click", async () => {
@@ -779,42 +785,54 @@ function bindAdminButtons() {
       overheadHourlyPerMachine: parseFloat(document.getElementById("configOverheadPerMachine").value) || 0,
     };
 
-    const resp = await fetch(`${API_BASE}/settings`, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "X-Admin-Session": adminSessionToken || ""
-      },
-      body: JSON.stringify(payload)
-    });
-    if (!resp.ok) {
-      alert("保存失败，请确认已登录并填写完整数据");
-      return;
+    try {
+      const resp = await fetch(`${API_BASE}/settings`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "X-Admin-Session": adminSessionToken || ""
+        },
+        body: JSON.stringify(payload)
+      });
+      if (!resp.ok) {
+        const msg = (await resp.json().catch(() => ({})))?.detail || "保存失败，请确认已登录并填写完整数据";
+        alert(msg);
+        return;
+      }
+      runtimeConfig = await resp.json();
+      alert("保存成功！");
+    } catch (err) {
+      console.error("保存配置失败", err);
+      alert("保存失败，后台接口不可达或数据格式有误");
     }
-    runtimeConfig = await resp.json();
-    alert("保存成功！");
   });
 
   document.getElementById("changePasswordBtn").addEventListener("click", async () => {
     const oldPassword = prompt("请输入旧密码");
     const newPassword = prompt("请输入新密码");
     if (!oldPassword || !newPassword) return;
-    const resp = await fetch(`${API_BASE}/admin/change-password`, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "X-Admin-Session": adminSessionToken || ""
-      },
-      body: JSON.stringify({ oldPassword, newPassword })
-    });
-    if (!resp.ok) {
-      alert("修改失败，请确认旧密码或登录状态");
-      return;
+    try {
+      const resp = await fetch(`${API_BASE}/admin/change-password`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "X-Admin-Session": adminSessionToken || ""
+        },
+        body: JSON.stringify({ oldPassword, newPassword })
+      });
+      if (!resp.ok) {
+        const msg = (await resp.json().catch(() => ({})))?.detail || "修改失败，请确认旧密码或登录状态";
+        alert(msg);
+        return;
+      }
+      alert("密码已更新，请重新登录");
+      adminSessionToken = null;
+      localStorage.removeItem("quote_admin_session");
+      await checkAdminStatus();
+    } catch (err) {
+      console.error("修改密码失败", err);
+      alert("修改失败，后台接口不可达");
     }
-    alert("密码已更新，请重新登录");
-    adminSessionToken = null;
-    localStorage.removeItem("quote_admin_session");
-    await checkAdminStatus();
   });
 }
 

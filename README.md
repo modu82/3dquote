@@ -39,6 +39,7 @@
    ```
    后端默认监听 `${API_PORT:-8000}`，配置文件挂载到 `./data`。
 4. 打开 `frontend/index.html`（本地文件或任意静态服务器），如需远程接口可在浏览器控制台设置 `window.API_BASE` 覆盖默认 `http://localhost:8000/api`。
+   - 管理员默认账号密码：`admin` / `changeme`，登录后请在右上角“管理员登录”菜单中立刻修改密码。
 
 ### 本地运行（无容器）
 1. 安装依赖：`pip install -r requirements.txt`。
