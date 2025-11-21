@@ -35,6 +35,7 @@ class Material(BaseModel):
     vendor: str          # 厂商
     name: str            # 型号/材料名
     pricePerKg: float    # 元 / kg
+    processType: Optional[str] = None  # 加工类型，None 视为通用
 
 
 class Machine(BaseModel):
@@ -45,6 +46,7 @@ class Machine(BaseModel):
     expectedLifeYears: float | None = None   # 预计使用年限（年，可选）
     expectedMonthlyHours: float | None = None  # 每月预计工作小时数（小时，可选）
     powerW: float | None = None              # 运行时平均功率（W，可选）
+    processType: Optional[str] = None        # 加工类型，None 视为通用
 
 class PostProcessRule(BaseModel):
     key: str                      # 唯一标识，比如 "NONE" / "BASIC"
@@ -52,6 +54,8 @@ class PostProcessRule(BaseModel):
     baseMinutes: float            # 每件固定基础时间（分钟）
     minutesPerGram: float         # 每克增加的时间（分钟/克）
     extraMaterialCostPerGram: float = 0.0  # 每克额外材料成本（元/克）
+    processType: Optional[str] = None       # 适用的加工工艺（None 表示通用）
+    costMultiplier: float = 1.0             # 成本系数，可按工艺调整最终价格
 
 
 class Settings(BaseModel):
@@ -95,14 +99,20 @@ class ChangePasswordRequest(BaseModel):
 
 DEFAULT_SETTINGS = Settings(
     materials=[
-        Material(vendor="通用", name="PLA", pricePerKg=120),
-        Material(vendor="通用", name="PETG", pricePerKg=150),
-        Material(vendor="通用", name="ABS",  pricePerKg=160),
-        Material(vendor="通用", name="光固化树脂", pricePerKg=220),
+        Material(vendor="通用", name="PLA", pricePerKg=120, processType="FDM_3D_PRINT"),
+        Material(vendor="通用", name="PETG", pricePerKg=150, processType="FDM_3D_PRINT"),
+        Material(vendor="通用", name="ABS", pricePerKg=160, processType="FDM_3D_PRINT"),
+        Material(vendor="通用", name="水洗树脂", pricePerKg=220, processType="RESIN_3D_PRINT"),
+        Material(vendor="通用", name="高韧树脂", pricePerKg=260, processType="RESIN_3D_PRINT"),
+        Material(vendor="通用木料", name="桦木板", pricePerKg=35, processType="CNC_MILLING"),
+        Material(vendor="通用木料", name="樱桃木板", pricePerKg=65, processType="CNC_MILLING"),
+        Material(vendor="通用板材", name="亚克力板", pricePerKg=45, processType="CO2_LASER_ENGRAVE_CUT"),
     ],
     machines=[
-        Machine(vendor="Bambu Lab", name="A1C/通用桌面机", hourlyRate=10),
-        Machine(vendor="Bambu Lab", name="P1S/工业机",     hourlyRate=25),
+        Machine(vendor="Bambu Lab", name="A1/桌面机", hourlyRate=10, processType="FDM_3D_PRINT"),
+        Machine(vendor="Elegoo", name="Saturn 树脂机", hourlyRate=28, processType="RESIN_3D_PRINT"),
+        Machine(vendor="通用木工", name="三轴雕刻机", hourlyRate=80, processType="CNC_MILLING"),
+        Machine(vendor="通用激光", name="CO₂ 激光雕刻机", hourlyRate=120, processType="CO2_LASER_ENGRAVE_CUT"),
     ],
     defaultProfitMargin=0.4,
     defaultMinPricePerPart=15.0,
@@ -114,13 +124,14 @@ DEFAULT_SETTINGS = Settings(
     machinesPerOperator=3.0,
     overheadHourlyPerMachine=2.0,
 
-     postProcessRules=[
+    postProcessRules=[
         PostProcessRule(
             key="NONE",
             name="无后处理",
             baseMinutes=0,
             minutesPerGram=0,
             extraMaterialCostPerGram=0,
+            costMultiplier=1,
         ),
         PostProcessRule(
             key="BASIC",
@@ -128,6 +139,7 @@ DEFAULT_SETTINGS = Settings(
             baseMinutes=5,
             minutesPerGram=0.02,
             extraMaterialCostPerGram=0.02,
+            costMultiplier=1,
         ),
         PostProcessRule(
             key="FINE",
@@ -135,6 +147,7 @@ DEFAULT_SETTINGS = Settings(
             baseMinutes=10,
             minutesPerGram=0.05,
             extraMaterialCostPerGram=0.05,
+            costMultiplier=1.1,
         ),
         PostProcessRule(
             key="PAINT",
@@ -142,6 +155,7 @@ DEFAULT_SETTINGS = Settings(
             baseMinutes=20,
             minutesPerGram=0.08,
             extraMaterialCostPerGram=0.10,
+            costMultiplier=1.2,
         ),
     ],
 )
@@ -153,6 +167,8 @@ def _migrate_old_material(m: dict) -> Material:
     """兼容旧版本没有 vendor 字段的材料数据"""
     if "vendor" not in m:
         m["vendor"] = "未分类"
+    if "processType" not in m:
+        m["processType"] = None
     return Material(**m)
 
 
@@ -160,6 +176,8 @@ def _migrate_old_machine(m: dict) -> Machine:
     """兼容旧版本没有 vendor 字段的设备数据"""
     if "vendor" not in m:
         m["vendor"] = "未分类"
+    if "processType" not in m:
+        m["processType"] = None
     return Machine(**m)
 
 
@@ -198,7 +216,16 @@ def load_settings() -> Settings:
 
             # 新增：如果旧文件里没有，就用默认规则
             postProcessRules=(
-                [PostProcessRule(**r) for r in post_rules]
+                [
+                    PostProcessRule(
+                        **{
+                            **r,
+                            "costMultiplier": r.get("costMultiplier", 1),
+                            "processType": r.get("processType", None),
+                        }
+                    )
+                    for r in post_rules
+                ]
                 if isinstance(post_rules, list)
                 else DEFAULT_SETTINGS.postProcessRules
             ),
