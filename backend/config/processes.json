@@ -1,0 +1,6 @@
+[
+  { "value": "FDM_3D_PRINT", "label": "FDM 3D 打印" },
+  { "value": "RESIN_3D_PRINT", "label": "光固化 3D 打印" },
+  { "value": "CNC_MILLING", "label": "CNC 雕刻 / 铣削" },
+  { "value": "CO2_LASER_ENGRAVE_CUT", "label": "CO₂ 激光雕刻 / 切割" }
+]

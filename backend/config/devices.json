@@ -1,0 +1,26 @@
+[
+  {
+    "vendor": "Bambu Lab",
+    "name": "A1/桌面机",
+    "hourlyRate": 10,
+    "processType": "FDM_3D_PRINT"
+  },
+  {
+    "vendor": "Elegoo",
+    "name": "Saturn 树脂机",
+    "hourlyRate": 28,
+    "processType": "RESIN_3D_PRINT"
+  },
+  {
+    "vendor": "通用木工",
+    "name": "三轴雕刻机",
+    "hourlyRate": 80,
+    "processType": "CNC_MILLING"
+  },
+  {
+    "vendor": "通用激光",
+    "name": "CO₂ 激光雕刻机",
+    "hourlyRate": 120,
+    "processType": "CO2_LASER_ENGRAVE_CUT"
+  }
+]

@@ -1,74 +1,54 @@
 # 3dquote · 加工报价小工具
 
-一个用于 3D 打印、CNC 雕刻、激光雕刻/切割等工艺的轻量化报价工具。项目包含：
+一个用于 3D 打印、CNC 雕刻、激光雕刻/切割等工艺的轻量化报价工具。项目包含分离的前后端，以及可配置的材料/设备数据，方便独立迭代。
 
-- **纯前端单页**（`3d_quote.html`）：输入模型信息，调用后端获取材料/设备配置，计算报价并展示结果。
-- **FastAPI 后端**（`quote_api.py`）：提供报价配置读取/写入接口、管理员登录及密码修改接口。
-- **Docker 支持**：`docker-compose.yml` 帮助快速启动后端并持久化配置。
+## 目录结构
 
----
+```
+3dquote/
+├── backend/               # FastAPI 后端
+│   ├── quote_api.py       # API 入口，加载配置与管理员认证
+│   ├── models.py          # Pydantic 模型
+│   ├── services.py        # 配置、账号读写与默认数据
+│   └── config/            # 设备/材料/工艺/厂商配置（JSON）
+├── frontend/              # 前端静态页面
+│   ├── index.html         # 报价与管理界面
+│   └── assets/
+│       ├── main.js        # 业务逻辑（报价、分页、配置管理）
+│       └── style.css      # 样式
+├── docker-compose.yml
+├── requirements.txt
+└── .env                   # 服务端口等环境变量
+```
 
 ## 功能亮点
 
-- 💰 按体积/时间自动估算成本与报价，支持单件最低价与开机费。
-- 🧵 支持多种工艺与厂商：FDM/光固化 3D 打印、CNC 雕刻、CO₂ 激光雕刻/切割等，可按厂商和工艺分类材料、设备。
-- ⚙️ 细致的成本参数：材料单价、设备小时费用、电费、人工/管理成本、人机比等。
-- 🧩 后处理规则：按重量/件数估算打磨、上色等额外耗时与成本，可按工艺区分并设置成本系数。
-- 🔐 管理员模式：登录后可在线调整配置、修改密码；配置信息与管理员账号保存在 `./data/` 目录。
-
----
-
-## 项目结构
-
-```text
-3dquote/
-├── 3d_quote.html      # 前端页面：表单输入 + 报价结果展示 + 调用后端 API
-├── quote_api.py       # FastAPI 后端：报价配置读取/写入、管理员登录、密码修改
-└── docker-compose.yml # Docker 启动配置，挂载代码和数据目录
-```
-
----
+- 按体积/重量计算材料成本，木材等体积采购材料基于体积（cm³→m³）计价，可用密度自动在重量/体积间互算。
+- 独立的设备/材料/工艺 JSON 配置，新增工艺或厂商无需改代码，只需调整 `backend/config/*.json`。
+- 管理页分栏+分页：全局参数、后处理、材料、设备分页面切换；材料和设备列表支持每页数量自定义。
+- 管理员模式：登录后可在线调整配置、修改密码；配置持久化在 `/data/settings.json`。
 
 ## 快速开始
 
-### 方式一：使用 Docker Compose（推荐）
-1. 确保已安装 Docker 与 Docker Compose。
-2. 在项目根目录执行：
+### 使用 Docker Compose
+1. 准备 Docker 与 Docker Compose。
+2. 根据需要修改 `.env`（端口、CORS 等）。
+3. 运行：
    ```bash
    docker-compose up -d
    ```
-   后端会在 `0.0.0.0:8000` 启动，配置文件保存在 `./data/`。
-3. 打开 `3d_quote.html`，将文件中 `const API_BASE = "http://10.1.1.21:8000/api";` 修改为实际后端地址（例如 `http://localhost:8000/api`），然后在浏览器直接打开该 HTML 文件或用任意静态服务器访问。
+   后端默认监听 `${API_PORT:-8000}`，配置文件挂载到 `./data`。
+4. 打开 `frontend/index.html`（本地文件或任意静态服务器），如需远程接口可在浏览器控制台设置 `window.API_BASE` 覆盖默认 `http://localhost:8000/api`。
 
-### 方式二：本地运行 Python 服务
-1. 准备 Python 3.11+。
-2. 安装依赖并启动：
-   ```bash
-   pip install fastapi uvicorn
-   uvicorn quote_api:app --host 0.0.0.0 --port 8000
-   ```
-3. 同样在 `3d_quote.html` 内将 `API_BASE` 指向你的后端地址。
+### 本地运行（无容器）
+1. 安装依赖：`pip install -r requirements.txt`。
+2. 启动服务：`uvicorn backend.quote_api:app --host 0.0.0.0 --port 8000`。
+3. 同样在前端页面中将 `API_BASE` 指向实际服务地址。
 
-> 可通过环境变量 `ADMIN_USER` 和 `ADMIN_PASS` 调整默认管理员账号（默认 `admin / changeme`）。首次启动时会在 `./data/admin_account.json` 中生成账号文件，后续修改需删除该文件或使用管理员界面改密。
+### 配置文件
+- `backend/config/materials.json`：材料列表，支持 `billingMethod` 为 `weight`(元/kg) 或 `volume`(元/m³)，可附带 `density`(g/cm³) 用于重量/体积互算。
+- `backend/config/devices.json`：设备与小时成本。
+- `backend/config/processes.json`：工艺枚举（前端下拉展示）。
+- `backend/config/vendors.json`：预置厂商列表。
 
----
-
-## API 概览
-
-- `GET /api/settings`：公开获取当前报价配置（材料、设备、利润率、后处理规则等）。
-- `POST /api/settings`：更新报价配置，需在请求头携带 `X-Admin-Session`。
-- `POST /api/admin/login`：管理员登录，返回 `token`，后续请求需放入 `X-Admin-Session` 头。
-- `POST /api/admin/logout`：注销当前会话。
-- `GET /api/admin/status`：查询 session 是否有效。
-- `POST /api/admin/change-password`：修改管理员密码，需有效会话并提供旧密码。
-
-配置持久化文件位于 `./data/settings.json` 与 `./data/admin_account.json`，可备份或通过 Docker 卷挂载到其他路径。
-
----
-
-## 使用小贴士
-
-- 前端页面默认填充了演示材料、设备和后处理参数，访问时会尝试从后端 `/api/settings` 读取最新配置。
-- 通过页面右上角的“管理员登录”按钮输入凭证后，可在“参数配置”区域增删材料/设备、调整利润率和后处理规则；保存会调用 `POST /api/settings`。
-- 如需在局域网部署，请确保浏览器能访问后端地址并相应更新 `API_BASE`。
-
+首次运行会将上述配置与环境变量生成的管理员账号落盘到 `/data` 目录，后续可通过管理界面修改并保存。

@@ -1,0 +1,60 @@
+[
+  {
+    "vendor": "通用",
+    "name": "PLA",
+    "billingMethod": "weight",
+    "pricePerKg": 120,
+    "processType": "FDM_3D_PRINT"
+  },
+  {
+    "vendor": "通用",
+    "name": "PETG",
+    "billingMethod": "weight",
+    "pricePerKg": 150,
+    "processType": "FDM_3D_PRINT"
+  },
+  {
+    "vendor": "通用",
+    "name": "ABS",
+    "billingMethod": "weight",
+    "pricePerKg": 160,
+    "processType": "FDM_3D_PRINT"
+  },
+  {
+    "vendor": "通用",
+    "name": "水洗树脂",
+    "billingMethod": "weight",
+    "pricePerKg": 220,
+    "processType": "RESIN_3D_PRINT"
+  },
+  {
+    "vendor": "通用",
+    "name": "高韧树脂",
+    "billingMethod": "weight",
+    "pricePerKg": 260,
+    "processType": "RESIN_3D_PRINT"
+  },
+  {
+    "vendor": "通用木料",
+    "name": "桦木板",
+    "billingMethod": "volume",
+    "pricePerCubicMeter": 3600,
+    "density": 0.65,
+    "processType": "CNC_MILLING"
+  },
+  {
+    "vendor": "通用木料",
+    "name": "樱桃木板",
+    "billingMethod": "volume",
+    "pricePerCubicMeter": 5200,
+    "density": 0.7,
+    "processType": "CNC_MILLING"
+  },
+  {
+    "vendor": "通用板材",
+    "name": "亚克力板",
+    "billingMethod": "weight",
+    "pricePerKg": 45,
+    "processType": "CO2_LASER_ENGRAVE_CUT"
+  }
+]

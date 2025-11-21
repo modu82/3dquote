@@ -1,0 +1,271 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <title>通用加工报价计算器</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <link rel="stylesheet" href="assets/style.css" />
+</head>
+<body>
+  <div class="container">
+    <div class="admin-bar">
+      <span class="admin-name" id="adminName"></span>
+      <button type="button" class="mini-btn" id="adminAuthBtn">管理员登录</button>
+    </div>
+
+    <h1>通用加工报价计算器</h1>
+    <div class="subtitle">根据工艺选择对应材料与设备，快速估算成本与利润</div>
+
+    <form id="quote-form">
+      <div class="grid">
+        <div>
+          <label for="processType">加工类型</label>
+          <select id="processType"></select>
+          <div class="hint">选择工艺后，下方材料和设备列表将按工艺自动筛选。</div>
+        </div>
+        <div>
+          <label>材料厂商</label>
+          <select id="materialVendor"></select>
+          <label class="mt-6">材料型号 / 名称</label>
+          <select id="material" required></select>
+          <div class="hint">支持按重量或体积计价的材料，木材默认按体积计。</div>
+        </div>
+        <div id="weightField">
+          <label for="weight">单件耗材重量（g）</label>
+          <input id="weight" type="number" step="0.01" min="0" />
+          <div class="hint">3D 打印等按重量计价的材料使用。</div>
+        </div>
+        <div id="volumeField">
+          <label for="volume">单件体积（cm³）</label>
+          <input id="volume" type="number" step="0.01" min="0" />
+          <div class="hint">木材等按体积采购的材料使用，缺省将根据密度互算重量/体积。</div>
+        </div>
+        <div>
+          <label>单件打印时间</label>
+          <div class="inline-time">
+            <div class="time-field"><input id="printDays" type="number" step="1" min="0" /><span>天</span></div>
+            <div class="time-field"><input id="printHours" type="number" step="1" min="0" /><span>小时</span></div>
+            <div class="time-field"><input id="printMinutes" type="number" step="1" min="0" /><span>分钟</span></div>
+          </div>
+          <div class="hint">可只填小时或分钟，也可以三项一起填，将自动折算为总小时。</div>
+        </div>
+        <div>
+          <label>设备厂商</label>
+          <select id="machineVendor"></select>
+          <label class="mt-6">设备型号 / 名称</label>
+          <select id="machine" required></select>
+          <div class="hint">设备列表在下方“设备设置”中维护。</div>
+        </div>
+        <div>
+          <label for="postProcess">后处理等级</label>
+          <select id="postProcess" required></select>
+          <div class="hint">后处理耗时与材料消耗可在“后处理设置”中配置。</div>
+        </div>
+        <div>
+          <label for="quantity">数量（件）</label>
+          <input id="quantity" type="number" step="1" min="1" value="1" required />
+        </div>
+        <div>
+          <label for="customMargin">利润率（本次，%）</label>
+          <input id="customMargin" type="number" step="1" min="0" placeholder="留空则用默认配置" />
+          <div class="hint">默认配置可在管理员模式下调整。</div>
+        </div>
+        <div>
+          <label for="customMin">单件最低价（本次，元）</label>
+          <input id="customMin" type="number" step="0.1" min="0" placeholder="留空则用默认配置" />
+          <div class="hint">用于限制最小单价，防止小零件过低。</div>
+        </div>
+      </div>
+      <div class="actions">
+        <button type="submit">计算报价</button>
+        <button type="button" class="secondary" id="resetBtn">清空</button>
+        <button type="button" class="secondary" id="exportBtn">导出报价单</button>
+      </div>
+    </form>
+
+    <div class="result" id="result" style="display:none;">
+      <h2>报价结果 <span class="badge">内部试算</span></h2>
+      <div class="result-main" id="result-total"></div>
+      <div class="result-detail" id="result-detail"></div>
+    </div>
+
+    <div class="settings" id="settingsSection" style="display:none;">
+      <div class="settings-nav" id="settingsNav">
+        <button type="button" class="nav-btn active" data-target="panel-global">全局参数</button>
+        <button type="button" class="nav-btn" data-target="panel-post">后处理设置</button>
+        <button type="button" class="nav-btn" data-target="panel-materials">材料设置</button>
+        <button type="button" class="nav-btn" data-target="panel-machines">设备设置</button>
+      </div>
+
+      <section class="settings-panel" id="panel-global">
+        <h3>
+          全局参数
+          <div>
+            <button type="button" class="mini-btn" id="changePasswordBtn">修改管理员密码</button>
+            <button type="button" class="mini-btn" id="saveSettingsBtn">保存设置到服务器</button>
+          </div>
+        </h3>
+        <small>作为默认值，影响所有报价；保存后对所有用户生效。</small>
+        <div class="inline-config">
+          <div>
+            <label for="configProfitMargin">默认利润率（%）</label>
+            <input id="configProfitMargin" type="number" step="1" min="0" />
+          </div>
+          <div>
+            <label for="configMinPrice">默认单件最低价（元）</label>
+            <input id="configMinPrice" type="number" step="0.1" min="0" />
+          </div>
+          <div>
+            <label for="configSetupFee">开机/调机费（元/订单）</label>
+            <input id="configSetupFee" type="number" step="0.1" min="0" />
+          </div>
+        </div>
+
+        <h3>全局成本设置</h3>
+        <small>用于计算设备小时成本：折旧 + 电费 + 人工 + 杂项。</small>
+        <div class="inline-config">
+          <div>
+            <label for="configElectricityPrice">电价（元 / kWh）</label>
+            <input id="configElectricityPrice" type="number" step="0.01" min="0" />
+          </div>
+          <div>
+            <label for="configLaborHourly">操作人工成本（元 / 小时）</label>
+            <input id="configLaborHourly" type="number" step="0.1" min="0" />
+          </div>
+          <div>
+            <label for="configMachinesPerOperator">每名操作员负责设备数量（台）</label>
+            <input id="configMachinesPerOperator" type="number" step="1" min="1" />
+          </div>
+          <div>
+            <label for="configOverheadPerMachine">杂项成本（元 / 台·小时）</label>
+            <input id="configOverheadPerMachine" type="number" step="0.1" min="0" />
+          </div>
+        </div>
+      </section>
+
+      <section class="settings-panel" id="panel-post" style="display:none;">
+        <h3>后处理设置</h3>
+        <small>每件基础时间 + （重量 × 每克时间）估算人工工时；每克材料成本用于耗材/涂料等。</small>
+        <div class="table-wrapper">
+          <table>
+            <thead>
+              <tr>
+                <th>Key</th>
+                <th>显示名称</th>
+                <th>工艺</th>
+                <th>基础时间（分钟）</th>
+                <th>每克时间（分钟/克）</th>
+                <th>材料成本（元/克）</th>
+                <th>成本系数</th>
+                <th>操作</th>
+              </tr>
+            </thead>
+            <tbody id="postProcessTableBody"></tbody>
+          </table>
+        </div>
+        <div class="actions left">
+          <button id="addPostProcessBtn" class="secondary">新增后处理等级</button>
+        </div>
+      </section>
+
+      <section class="settings-panel" id="panel-materials" style="display:none;">
+        <h3>材料设置</h3>
+        <div class="vendor-filter">
+          <label>按工艺筛选：</label>
+          <select id="materialsProcessFilter"></select>
+          <label>当前材料厂商：</label>
+          <select id="materialsVendorFilter"></select>
+          <input id="newMaterialVendorInput" type="text" placeholder="新厂商名称" />
+          <button type="button" class="mini-btn" id="addMaterialVendorBtn">添加厂商</button>
+        </div>
+        <div class="table-wrapper">
+          <table>
+            <thead>
+              <tr>
+                <th>厂商</th>
+                <th>工艺</th>
+                <th>材料名称</th>
+                <th>计价方式</th>
+                <th>单价（元/kg）</th>
+                <th>单价（元/m³）</th>
+                <th>密度（g/cm³）</th>
+                <th>操作</th>
+              </tr>
+            </thead>
+            <tbody id="materialsTableBody"></tbody>
+          </table>
+        </div>
+        <div class="pagination" data-type="materials">
+          <label>每页显示
+            <select id="materialsPageSize">
+              <option value="5">5</option>
+              <option value="10" selected>10</option>
+              <option value="15">15</option>
+              <option value="20">20</option>
+            </select>
+          </label>
+          <div class="pager">
+            <button type="button" id="materialsPrev">上一页</button>
+            <span id="materialsPageInfo"></span>
+            <button type="button" id="materialsNext">下一页</button>
+          </div>
+        </div>
+        <div class="actions left">
+          <button id="addMaterialBtn" class="secondary">新增材料</button>
+        </div>
+      </section>
+
+      <section class="settings-panel" id="panel-machines" style="display:none;">
+        <h3>设备设置</h3>
+        <div class="vendor-filter">
+          <label>按工艺筛选：</label>
+          <select id="machinesProcessFilter"></select>
+          <label>当前设备厂商：</label>
+          <select id="machinesVendorFilter"></select>
+          <input id="newMachineVendorInput" type="text" placeholder="新厂商名称" />
+          <button type="button" class="mini-btn" id="addMachineVendorBtn">添加厂商</button>
+        </div>
+        <small>单位：元 / 小时。可填写设备价格和折旧年限，点击“算”自动计算小时成本。</small>
+        <div class="table-wrapper">
+          <table>
+            <thead>
+              <tr>
+                <th>厂商</th>
+                <th>工艺</th>
+                <th>设备名称</th>
+                <th>设备价（元）</th>
+                <th>折旧年限（年）</th>
+                <th>月工时（小时）</th>
+                <th>功率（W）</th>
+                <th>小时成本（元）</th>
+                <th>操作</th>
+              </tr>
+            </thead>
+            <tbody id="machinesTableBody"></tbody>
+          </table>
+        </div>
+        <div class="pagination" data-type="machines">
+          <label>每页显示
+            <select id="machinesPageSize">
+              <option value="5">5</option>
+              <option value="10" selected>10</option>
+              <option value="15">15</option>
+              <option value="20">20</option>
+            </select>
+          </label>
+          <div class="pager">
+            <button type="button" id="machinesPrev">上一页</button>
+            <span id="machinesPageInfo"></span>
+            <button type="button" id="machinesNext">下一页</button>
+          </div>
+        </div>
+        <div class="actions left">
+          <button id="addMachineBtn" class="secondary">新增设备</button>
+        </div>
+      </section>
+    </div>
+  </div>
+
+  <script src="assets/main.js"></script>
+</body>
+</html>
