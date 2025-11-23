@@ -199,16 +199,16 @@
       background: #d1d5db;
     }
 
-    .materials-table {
+    .materials-table-container {
       border: 1px solid #e5e7eb;
       border-radius: 12px;
       background: #fff;
       padding: 12px;
     }
-    .materials-table table {
+    .materials-table {
       width: 100%;
       border-collapse: collapse;
-      table-layout: fixed;
+      table-layout: auto;
     }
     .materials-table th,
     .materials-table td {
@@ -223,7 +223,7 @@
       font-weight: 600;
       color: #4b5563;
     }
-    .material-row td {
+    .materials-table .material-row td {
       background: #fff;
     }
     .materials-table input,
@@ -778,8 +778,8 @@
         <button type="button" class="mini-btn" id="addMaterialVendorBtn">添加厂商</button>
       </div>
       <small>按计价模式填写单价：重量（元/kg）或体积（元/m³），内容会同步到上方下拉框。</small>
-      <div class="table-wrapper materials-table">
-        <table>
+      <div class="table-wrapper materials-table-container">
+        <table class="materials-table">
           <thead>
             <tr class="material-header">
               <th style="width:14%; min-width:140px;">厂商</th>
