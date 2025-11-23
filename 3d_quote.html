@@ -415,16 +415,16 @@
           <div class="hint">先选厂商，再选材料型号。材料列表请联系管理员维护。</div>
         </div>
 
-        <div>
+        <div id="weightField">
           <label for="weight">单件耗材重量（g）</label>
           <input id="weight" type="number" step="0.01" min="0" required />
-          <div class="hint">支持到 0.01 g（从切片软件中查看耗材用量）。</div>
+          <div class="hint">当材料按重量计价时填写，支持到 0.01 g（从切片软件中查看耗材用量）。</div>
         </div>
 
-        <div>
+        <div id="volumeField">
           <label for="volume">单件材料体积（cm³）</label>
           <input id="volume" type="number" step="0.01" min="0" />
-          <div class="hint">当材料按体积计价（如木材）时使用此值；非体积材料可留空。</div>
+          <div class="hint">当材料按体积计价（如木材）时填写；按重量计价时自动隐藏。</div>
         </div>
 
         <!-- 打印时间与设备 -->
@@ -539,7 +539,7 @@
               <option value="false">未采用</option>
             </select>
           </div>
-          <div>
+          <div id="recordsVisibilityFilterWrap">
             <label for="recordsVisibilityFilter">可见范围</label>
             <select id="recordsVisibilityFilter">
               <option value="all">全部</option>
@@ -867,7 +867,7 @@
     let recordsCreatorFilter = "";
     let recordsAdoptedFilter = "all";
     let recordsVisibilityFilter = "all";
-    let recordVisibilitySelection = "admin_only";
+    let recordVisibilitySelection = "owner_only";
 
     function formatMoney(v) {
       return "¥" + v.toFixed(2);
@@ -967,6 +967,7 @@
         rebuildMaterialOptions();
         rebuildMachineOptions();
         rebuildPostProcessOptions();
+        updateMaterialUsageFields();
       });
     }
 
@@ -1622,6 +1623,43 @@
           matSelect.appendChild(opt);
         }
       });
+
+      if (matSelect.options.length && !matSelect.value) {
+        matSelect.value = matSelect.options[0].value;
+      }
+      updateMaterialUsageFields();
+    }
+
+    function getSelectedMaterial() {
+      const materials = getMaterialsFromTable();
+      const matSelect = document.getElementById("material");
+      const idx = parseInt(matSelect?.value || "", 10);
+      if (isNaN(idx) || idx < 0 || idx >= materials.length) return null;
+      return materials[idx];
+    }
+
+    function updateMaterialUsageFields() {
+      const material = getSelectedMaterial();
+      const pricingMode = material?.pricingMode === "VOLUME" ? "VOLUME" : "WEIGHT";
+      const weightWrap = document.getElementById("weightField");
+      const volumeWrap = document.getElementById("volumeField");
+      const weightInput = document.getElementById("weight");
+      const volumeInput = document.getElementById("volume");
+      if (!weightInput || !volumeInput) return;
+
+      if (pricingMode === "VOLUME") {
+        if (weightWrap) weightWrap.style.display = "none";
+        weightInput.required = false;
+        weightInput.value = "";
+        if (volumeWrap) volumeWrap.style.display = "";
+        volumeInput.required = true;
+      } else {
+        if (weightWrap) weightWrap.style.display = "";
+        weightInput.required = true;
+        if (volumeWrap) volumeWrap.style.display = "none";
+        volumeInput.required = false;
+        volumeInput.value = "";
+      }
     }
 
     function rebuildMachineOptions() {
@@ -1686,6 +1724,7 @@
 
     document.getElementById("materialVendor").addEventListener("change", rebuildMaterialOptions);
     document.getElementById("machineVendor").addEventListener("change", rebuildMachineOptions);
+    document.getElementById("material").addEventListener("change", updateMaterialUsageFields);
 
     function initSettingsFromRuntime() {
       document.getElementById("materialsTableBody").innerHTML = "";
@@ -1823,6 +1862,9 @@
       const recordsMain = document.getElementById("recordsMain");
       const recordAdopted = document.getElementById("recordAdoptedFlag");
       const recordVisibilitySelect = document.getElementById("recordVisibilitySelect");
+      const recordVisibilityWrap = recordVisibilitySelect?.closest("div");
+      const recordsVisibilityFilterWrap = document.getElementById("recordsVisibilityFilterWrap");
+      const recordsVisibilitySelect = document.getElementById("recordsVisibilityFilter");
 
       const authed = isAuthenticated();
       if (loginPanel) loginPanel.style.display = authed ? "none" : "";
@@ -1855,7 +1897,15 @@
         recordAdopted.disabled = !isAdmin;
       }
       if (recordVisibilitySelect) {
+        recordVisibilitySelection = isAdmin ? recordVisibilitySelection : "owner_only";
         recordVisibilitySelect.value = recordVisibilitySelection;
+        recordVisibilitySelect.disabled = !isAdmin;
+        if (recordVisibilityWrap) recordVisibilityWrap.style.display = isAdmin ? "" : "none";
+      }
+      if (recordsVisibilityFilterWrap) {
+        if (!isAdmin) recordsVisibilityFilter = "all";
+        recordsVisibilityFilterWrap.style.display = isAdmin ? "" : "none";
+        if (recordsVisibilitySelect) recordsVisibilitySelect.value = recordsVisibilityFilter;
       }
       if (authed) {
         populateRecordCreatorsOptions(isAdmin ? cachedUsers : []);
@@ -1925,7 +1975,7 @@
       if (month) params.append("month", month);
       if (recordsCreatorFilter) params.append("creator", recordsCreatorFilter);
       if (recordsAdoptedFilter !== "all") params.append("adopted", recordsAdoptedFilter === "true");
-      if (recordsVisibilityFilter !== "all") params.append("visibility", recordsVisibilityFilter);
+      if (isAdmin && recordsVisibilityFilter !== "all") params.append("visibility", recordsVisibilityFilter);
       const resp = await fetch(`${API_BASE}/quotes?${params.toString()}`, {
         headers: authHeaders()
       });
@@ -2233,7 +2283,9 @@
 
     async function persistQuoteResult(quote) {
       try {
-        const recordVisibility = document.getElementById("recordVisibilitySelect")?.value || "admin_only";
+        const recordVisibility = isAdmin
+          ? (document.getElementById("recordVisibilitySelect")?.value || "admin_only")
+          : "owner_only";
         const recordAdopted = isAdmin && document.getElementById("recordAdoptedFlag")?.checked ? true : false;
         await fetch(`${API_BASE}/quotes`, {
           method: "POST",
@@ -2561,6 +2613,10 @@
       const volume = parseFloat(document.getElementById("volume").value) || 0;
       if (material.pricingMode === "VOLUME" && volume <= 0) {
         alert("当前材料按体积计价，请填写有效的体积。");
+        return;
+      }
+      if (material.pricingMode !== "VOLUME" && weight <= 0) {
+        alert("当前材料按重量计价，请填写有效的重量。");
         return;
       }
 

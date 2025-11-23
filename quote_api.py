@@ -821,7 +821,13 @@ def create_quote_record(
 ):
     """保存一次报价结果，用于后续对账和统计。"""
     session = require_authenticated(x_user_session, x_admin_session, x_session)
-    visibility = body.visibility if body.visibility in ("admin_only", "all_users", "owner_only") else "admin_only"
+    is_admin = session.get("role") == "admin"
+    visibility = (
+        body.visibility if is_admin and body.visibility in ("admin_only", "all_users", "owner_only") else None
+    )
+    # 普通用户不允许自定义可见范围，默认仅创建人可见；管理员可选择
+    visibility = visibility or ("admin_only" if is_admin else "owner_only")
+
     existing = load_quote_records()
     record = QuoteRecord(
         **body.dict(),
@@ -829,7 +835,7 @@ def create_quote_record(
         createdAt=datetime.utcnow().isoformat() + "Z",
         createdBy=session.get("username", "unknown"),
         visibility=visibility,
-        adopted=bool(body.adopted),
+        adopted=bool(body.adopted) if is_admin else False,
     )
     existing.append(record)
     save_quote_records(existing)
@@ -850,6 +856,8 @@ def list_quote_records(
 ):
     """分页查询报价记录，支持按月份、创建人、采用状态与可见性过滤。"""
     session = require_authenticated(x_user_session, x_admin_session, x_session)
+    if session.get("role") != "admin":
+        visibility = None
     page = max(page, 1)
     pageSize = min(max(pageSize, 1), 200)
     all_records = load_quote_records()
