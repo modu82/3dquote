@@ -201,32 +201,48 @@
 
     .material-row {
       display: grid;
-      grid-template-columns: 1.2fr 1.5fr 2fr 1.5fr 1.2fr 1fr auto;
+      grid-template-columns: 1.2fr 1.5fr 2fr 1.5fr 1.2fr 0.8fr auto;
       column-gap: 8px;
       align-items: center;
-      padding: 6px 0;
-      border-bottom: 1px dashed #eee;
+      margin-bottom: 8px;
     }
     .material-row select,
     .material-row input,
-    .material-row button {
-      height: 32px;
-      line-height: 32px;
+    .material-row button,
+    .material-row .mini-btn {
+      height: 36px;
+      line-height: 36px;
       box-sizing: border-box;
       font-size: 14px;
       padding: 0 8px;
     }
-    .material-row .unit-label {
-      line-height: 32px;
-      font-size: 14px;
+    .material-row .mini-btn {
+      border-radius: 6px;
+      padding: 0 12px;
+    }
+    .material-row .unit-label,
+    .material-row .unit-text,
+    .material-row .sub-label,
+    .material-row .material-price-hint {
+      font-size: 12px;
+      line-height: 18px;
       color: #555;
     }
+    .material-row .unit-label,
+    .material-row .unit-text {
+      display: flex;
+      align-items: center;
+      height: 36px;
+    }
     .material-header {
-      font-size: 13px;
-      font-weight: 600;
+      display: grid;
+      grid-template-columns: 1.2fr 1.5fr 2fr 1.5fr 1.2fr 0.8fr auto;
+      column-gap: 8px;
+      align-items: center;
+      margin-bottom: 4px;
+      font-size: 14px;
+      font-weight: 500;
       color: #555;
-      padding: 8px 0 6px;
-      border-bottom: 1px solid #e5e7eb;
     }
     .material-price-wrap {
       display: flex;
@@ -752,7 +768,7 @@
           <div>材料名称</div>
           <div>计价模式</div>
           <div>单价</div>
-          <div class="unit-label">单位</div>
+          <div class="unit-text">单位</div>
           <div>操作</div>
         </div>
         <div id="materialsTableBody"></div>
@@ -1260,6 +1276,22 @@
       return rules;
     }
 
+    function computeMachineDepreciationHourly(machine) {
+      if (!machine) return 0;
+      const price = parseFloat(machine.price);
+      const lifeYears = parseFloat(machine.expectedLifeYears);
+      const monthlyHours = parseFloat(machine.expectedMonthlyHours);
+      if (
+        isNaN(price) || price <= 0 ||
+        isNaN(lifeYears) || lifeYears <= 0 ||
+        isNaN(monthlyHours) || monthlyHours <= 0
+      ) {
+        return 0;
+      }
+      const totalHours = lifeYears * 12 * monthlyHours;
+      return totalHours > 0 ? price / totalHours : 0;
+    }
+
 
     // ===== 材料 / 设备：表格构造 =====
     function appendMaterialRow(
@@ -1286,9 +1318,9 @@
             <input type="number" class="mat-price-weight" step="0.1" min="0" value="${pricePerKg}">
             <input type="number" class="mat-price-volume" step="0.1" min="0" value="${pricePerCubicMeter}" style="display:none;" title="元/立方米">
           </div>
-          <div class="hint mat-price-hint material-price-hint">按重量：元/kg</div>
+          <div class="hint mat-price-hint material-price-hint sub-label">按重量：元/kg</div>
         </div>
-        <div class="unit-label mat-unit">元/kg</div>
+        <div class="unit-text mat-unit">元/kg</div>
         <button type="button" class="mini-btn mat-delete">删</button>
       `;
       tbody.appendChild(row);
@@ -3002,7 +3034,12 @@
       const operatorHourly = (processCosts.laborHourlyCost || 0) / (processCosts.machinesPerOperator || 1);
       const overheadHourly = processCosts.overheadHourlyPerMachine || 0;
       const electricityHourly = (machine.powerW ? (machine.powerW / 1000) * (runtimeConfig.electricityPrice || 0) : 0);
-      const machineCostPerPart = totalHours * (machine.hourlyRate + operatorHourly + overheadHourly + electricityHourly);
+      const baseMachineHourly = machine.hourlyRate || 0;
+      const depreciationHourly = computeMachineDepreciationHourly(machine);
+      const machineHourly = baseMachineHourly > 0 ? baseMachineHourly : depreciationHourly;
+      const operationalHourly = operatorHourly + overheadHourly + electricityHourly;
+      const effectiveMachineHourly = machineHourly + (baseMachineHourly > 0 ? 0 : operationalHourly);
+      const machineCostPerPart = totalHours * effectiveMachineHourly;
       const totalPostMinutes = (post.baseMinutes || 0) + (post.minutesPerGram || 0) * weight;
       const postLaborCost = (processCosts.laborHourlyCost || 0) * totalPostMinutes / 60;
       const postMaterialCost = (post.extraMaterialCostPerGram || 0) * weight;
@@ -3021,6 +3058,7 @@
       const materialUsageLabel = material.pricingMode === "VOLUME"
         ? `${volume.toFixed(2)} cm³`
         : `${weight.toFixed(2)} g`;
+      const machineHourlyLabel = formatMoney(effectiveMachineHourly);
 
       const resultEl = document.getElementById("result");
       const resultTotalEl = document.getElementById("result-total");
@@ -3032,7 +3070,7 @@
         `▶ 加工类型：${processLabel}`,
         `▶ 材料：${material.vendor} / ${material.name}  ${materialPriceLabel}`,
         `   - 单件耗材：${materialUsageLabel} → 材料成本：${formatMoney(materialCostPerPart)}`,
-        `▶ 设备：${machine.vendor} / ${machine.name}  ${machine.hourlyRate} 元/小时`,
+        `▶ 设备：${machine.vendor} / ${machine.name}  ${machineHourlyLabel} 元/小时`,
         `   - 单件打印时间：${days} 天 ${hours} 小时 ${minutes} 分钟 ≈ ${totalHours.toFixed(2)} 小时`,
         `   - 设备成本：${formatMoney(machineCostPerPart)}`,
         `▶ 后处理：${post.name} → 单件后处理成本：${formatMoney(postCostPerPart)}（时间 ${totalPostMinutes.toFixed(2)} 分钟，人工 ${formatMoney(postLaborCost)}，材料 ${formatMoney(postMaterialCost)}，系数 x${postMultiplier.toFixed(2)}）`,
@@ -3072,6 +3110,8 @@
         postMaterialCost,
         totalPostMinutes,
         setupCostPerPart,
+        machineHourlyRateUsed: effectiveMachineHourly,
+        machineOperationalHourly: baseMachineHourly > 0 ? 0 : operationalHourly,
         costSumPerPart,
         withProfitPerPart,
         finalPricePerPart,
@@ -3108,7 +3148,7 @@
         `材料成本（单件）：${formatMoney(lastQuote.materialCostPerPart)}`,
         "",
         `设备：${lastQuote.machine.vendor} / ${lastQuote.machine.name}`,
-        `设备小时成本：${lastQuote.machine.hourlyRate} 元/小时`,
+        `设备小时成本：${formatMoney(lastQuote.machineHourlyRateUsed || lastQuote.machine.hourlyRate)} 元/小时`,
         `单件打印时间：${lastQuote.days} 天 ${lastQuote.hours} 小时 ${lastQuote.minutes} 分钟 ≈ ${lastQuote.totalHours.toFixed(2)} 小时`,
         `设备成本（单件）：${formatMoney(lastQuote.machineCostPerPart)}`,
         "",
