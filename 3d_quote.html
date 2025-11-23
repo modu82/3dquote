@@ -750,7 +750,7 @@
 
     <div class="section admin-sub-section" id="userManagementSection">
       <h3>用户管理</h3>
-      <small>仅管理员可见：新增普通用户或管理员，重置密码、启用/禁用账号。</small>
+      <small>仅管理员可见：新增普通用户或管理员，重置密码、启用/禁用账号，并配置报价记录权限。</small>
       <div class="inline-config">
         <div>
           <label for="newUserName">用户名</label>
@@ -767,6 +767,20 @@
             <option value="admin">管理员</option>
           </select>
         </div>
+        <div>
+          <label for="newUserRecordEnabled">是否记录报价</label>
+          <select id="newUserRecordEnabled">
+            <option value="true">记录（默认）</option>
+            <option value="false">不记录</option>
+          </select>
+        </div>
+        <div>
+          <label for="newUserCanViewRecords">是否可查看记录</label>
+          <select id="newUserCanViewRecords">
+            <option value="false">不可查看（默认）</option>
+            <option value="true">允许查看</option>
+          </select>
+        </div>
         <div style="display:flex;align-items:flex-end;">
           <button type="button" class="mini-btn" id="createUserBtn">新增用户</button>
         </div>
@@ -778,6 +792,8 @@
               <th>用户名</th>
               <th>角色</th>
               <th>状态</th>
+              <th>记录开关</th>
+              <th>查看权限</th>
               <th>操作</th>
             </tr>
           </thead>
@@ -851,6 +867,8 @@
     let sessionUsername = "";
     let isUser = false;
     let isAdmin = false;
+    let canViewRecords = false;
+    let recordSavingEnabled = true;
     let settingsLoaded = false;
 
     let currentMaterialsVendor = VENDOR_FILTER_ALL;
@@ -864,6 +882,7 @@
     let machinesPageSize = parseInt(localStorage.getItem(MACHINES_PAGE_SIZE_KEY) || "10", 10);
     let recordsPage = 1;
     let recordsPageSize = parseInt(localStorage.getItem(RECORDS_PAGE_SIZE_KEY) || "10", 10);
+    let recordsMaxPage = 1;
     let recordsCreatorFilter = "";
     let recordsAdoptedFilter = "all";
     let recordsVisibilityFilter = "all";
@@ -1577,8 +1596,10 @@
       }
     });
     document.getElementById("recordsNext")?.addEventListener("click", () => {
-      recordsPage += 1;
-      renderQuoteRecords();
+      if (recordsPage < recordsMaxPage) {
+        recordsPage += 1;
+        renderQuoteRecords();
+      }
     });
     document.getElementById("recordsMonth")?.addEventListener("change", () => {
       recordsPage = 1;
@@ -1878,18 +1899,19 @@
       }
 
       if (adminTab) adminTab.style.display = isAdmin ? "" : "none";
-      if (recordsTab) recordsTab.style.display = authed ? "" : "none";
+      const canSeeRecordsTab = authed && (isAdmin || canViewRecords);
+      if (recordsTab) recordsTab.style.display = canSeeRecordsTab ? "" : "none";
       if (!isAdmin && adminTab?.classList.contains("active")) {
         setMainTab(document.querySelector('.main-tabs .page-tab[data-main="quoteMain"]'));
       }
-      if (!authed && recordsTab?.classList.contains("active")) {
+      if ((!authed || !canSeeRecordsTab) && recordsTab?.classList.contains("active")) {
         setMainTab(document.querySelector('.main-tabs .page-tab[data-main="quoteMain"]'));
       }
       if (adminMain) {
         adminMain.style.display = isAdmin ? "" : "none";
       }
       if (recordsMain) {
-        recordsMain.style.display = authed ? "" : "none";
+        recordsMain.style.display = canSeeRecordsTab ? "" : "none";
       }
 
       if (recordAdopted) {
@@ -1907,7 +1929,7 @@
         recordsVisibilityFilterWrap.style.display = isAdmin ? "" : "none";
         if (recordsVisibilitySelect) recordsVisibilitySelect.value = recordsVisibilityFilter;
       }
-      if (authed) {
+      if (authed && (isAdmin || canViewRecords)) {
         populateRecordCreatorsOptions(isAdmin ? cachedUsers : []);
       }
       const activeAdminTab = document.querySelector('#adminTabs .page-tab.active');
@@ -1926,6 +1948,8 @@
         isUser = false;
         sessionRole = null;
         sessionUsername = "";
+        canViewRecords = false;
+        recordSavingEnabled = true;
         updateAuthUI();
         return;
       }
@@ -1938,6 +1962,8 @@
           sessionUsername = data.username || "";
           isAdmin = sessionRole === "admin";
           isUser = sessionRole === "user" || sessionRole === "admin";
+          canViewRecords = !!data.canViewRecords || isAdmin;
+          recordSavingEnabled = data.recordEnabled !== false;
         } else {
           sessionToken = null;
           sessionRole = null;
@@ -1945,6 +1971,8 @@
           localStorage.removeItem(SESSION_KEY);
           isAdmin = false;
           isUser = false;
+          canViewRecords = false;
+          recordSavingEnabled = true;
         }
       } catch (e) {
         console.warn("检查登录状态失败:", e);
@@ -1954,6 +1982,8 @@
         localStorage.removeItem(SESSION_KEY);
         isAdmin = false;
         isUser = false;
+        canViewRecords = false;
+        recordSavingEnabled = true;
       }
 
       updateAuthUI();
@@ -2016,10 +2046,26 @@
     async function renderQuoteRecords() {
       const listEl = document.getElementById("recordsList");
       const infoEl = document.getElementById("recordsPageInfo");
+      const prevBtn = document.getElementById("recordsPrev");
+      const nextBtn = document.getElementById("recordsNext");
       if (!listEl) return;
+      if (!isAdmin && !canViewRecords) {
+        listEl.textContent = "当前账号无查看报价记录的权限，请联系管理员开启。";
+        if (infoEl) infoEl.textContent = "";
+        if (prevBtn) prevBtn.disabled = true;
+        if (nextBtn) nextBtn.disabled = true;
+        return;
+      }
       listEl.textContent = "加载中...";
       try {
         const data = await fetchQuoteRecords();
+        recordsPage = data.page || recordsPage;
+        recordsMaxPage = Math.max(1, Math.ceil((data.total || 0) / (data.pageSize || recordsPageSize || 1)));
+        if (recordsPage > recordsMaxPage) {
+          recordsPage = recordsMaxPage;
+          renderQuoteRecords();
+          return;
+        }
         listEl.innerHTML = "";
         if (Array.isArray(data.items) && data.items.length) {
           const visibilityLabels = {
@@ -2091,7 +2137,9 @@
         } else {
           listEl.textContent = "暂无记录";
         }
-        if (infoEl) infoEl.textContent = `${data.page}/${Math.max(1, Math.ceil((data.total || 0) / data.pageSize || 1))}（共 ${data.total || 0} 条）`;
+        if (infoEl) infoEl.textContent = `${recordsPage}/${recordsMaxPage}（共 ${data.total || 0} 条）`;
+        if (prevBtn) prevBtn.disabled = recordsPage <= 1;
+        if (nextBtn) nextBtn.disabled = recordsPage >= recordsMaxPage;
       } catch (e) {
         listEl.textContent = e.message || "获取记录失败";
         if (infoEl) infoEl.textContent = "";
@@ -2125,6 +2173,10 @@
       return resp.json();
     }
 
+    function getCachedUser(username) {
+      return Array.isArray(cachedUsers) ? cachedUsers.find(u => u.username === username) : null;
+    }
+
     function populateRecordCreatorsOptions(users = []) {
       const select = document.getElementById("recordsCreatorFilter");
       if (!select) return;
@@ -2156,13 +2208,13 @@
       if (!isAdmin) return;
       const tbody = document.getElementById("userTableBody");
       if (!tbody) return;
-      tbody.innerHTML = "<tr><td colspan='4'>加载中...</td></tr>";
+      tbody.innerHTML = "<tr><td colspan='6'>加载中...</td></tr>";
       try {
         const users = await fetchUsers();
         cachedUsers = users;
         populateRecordCreatorsOptions(users);
         if (!Array.isArray(users) || users.length === 0) {
-          tbody.innerHTML = "<tr><td colspan='4'>暂无用户</td></tr>";
+          tbody.innerHTML = "<tr><td colspan='6'>暂无用户</td></tr>";
           return;
         }
         tbody.innerHTML = "";
@@ -2172,6 +2224,14 @@
             <td>${user.username}</td>
             <td>${user.role === "admin" ? "管理员" : "普通用户"}</td>
             <td>${user.active ? "启用" : "禁用"}</td>
+            <td>
+              <span class="badge">${user.recordEnabled ? "记录中" : "不记录"}</span>
+              <button type="button" class="mini-btn" data-action="record" data-username="${user.username}" data-enabled="${user.recordEnabled}">${user.recordEnabled ? "暂停记录" : "开启记录"}</button>
+            </td>
+            <td>
+              <span class="badge">${user.canViewRecords ? "可查看" : "不可查看"}</span>
+              <button type="button" class="mini-btn" data-action="view" data-username="${user.username}" data-view="${user.canViewRecords}">${user.canViewRecords ? "收回权限" : "允许查看"}</button>
+            </td>
             <td>
               <button type="button" class="mini-btn" data-action="reset" data-username="${user.username}">重置密码</button>
               <button type="button" class="mini-btn" data-action="edit" data-username="${user.username}" data-role="${user.role}">编辑</button>
@@ -2184,7 +2244,7 @@
           tbody.appendChild(tr);
         });
       } catch (e) {
-        tbody.innerHTML = `<tr><td colspan='4'>${e.message || "加载失败"}</td></tr>`;
+        tbody.innerHTML = `<tr><td colspan='6'>${e.message || "加载失败"}</td></tr>`;
       }
     }
 
@@ -2192,6 +2252,8 @@
       const name = document.getElementById("newUserName").value.trim();
       const pwd = document.getElementById("newUserPassword").value;
       const role = document.getElementById("newUserRole").value;
+      const recordFlag = document.getElementById("newUserRecordEnabled").value === "true";
+      const viewFlag = document.getElementById("newUserCanViewRecords").value === "true";
       if (!name || !pwd) {
         alert("请输入用户名和初始密码");
         return;
@@ -2200,13 +2262,15 @@
         const resp = await fetch(`${API_BASE}/admin/users`, {
           method: "POST",
           headers: { "Content-Type": "application/json", ...authHeaders() },
-          body: JSON.stringify({ username: name, password: pwd, role, active: true })
+          body: JSON.stringify({ username: name, password: pwd, role, active: true, recordEnabled: recordFlag, canViewRecords: viewFlag })
         });
         const data = await resp.json().catch(() => ({}));
         if (!resp.ok) throw new Error(data.detail || "创建失败");
         document.getElementById("newUserName").value = "";
         document.getElementById("newUserPassword").value = "";
         document.getElementById("newUserRole").value = "user";
+        document.getElementById("newUserRecordEnabled").value = "true";
+        document.getElementById("newUserCanViewRecords").value = "false";
         await renderUserTable();
         alert("用户已创建");
       } catch (e) {
@@ -2246,7 +2310,7 @@
       }
     }
 
-    async function updateUser(username, newUsername, newRole) {
+    async function updateUser(username, newUsername, newRole, extraPayload = {}) {
       if (!newUsername) newUsername = username;
       if (newRole !== "admin" && newRole !== "user") {
         alert("角色只能为 admin 或 user");
@@ -2256,7 +2320,7 @@
         const resp = await fetch(`${API_BASE}/admin/users/${encodeURIComponent(username)}`, {
           method: "PUT",
           headers: { "Content-Type": "application/json", ...authHeaders() },
-          body: JSON.stringify({ newUsername, role: newRole })
+          body: JSON.stringify({ newUsername, role: newRole, ...extraPayload })
         });
         const data = await resp.json().catch(() => ({}));
         if (!resp.ok) throw new Error(data.detail || "更新失败");
@@ -2282,6 +2346,7 @@
     }
 
     async function persistQuoteResult(quote) {
+      if (!recordSavingEnabled) return;
       try {
         const recordVisibility = isAdmin
           ? (document.getElementById("recordVisibilitySelect")?.value || "admin_only")
@@ -2345,6 +2410,8 @@
         sessionRole = data.role;
         isAdmin = sessionRole === "admin";
         isUser = sessionRole === "user" || sessionRole === "admin";
+        canViewRecords = !!data.canViewRecords || isAdmin;
+        recordSavingEnabled = data.recordEnabled !== false;
         localStorage.setItem(SESSION_KEY, sessionToken);
         await refreshAuthState(true);
         alert(`登录成功，当前角色：${sessionRole === "admin" ? "管理员" : "普通用户"}`);
@@ -2566,6 +2633,14 @@
         const newName = window.prompt("请输入新的用户名（留空则不修改）：", username) || username;
         const newRole = window.prompt("请输入角色 admin/user：", currentRole) || currentRole;
         updateUser(username, newName.trim(), newRole.trim());
+      } else if (action === "record") {
+        const user = getCachedUser(username);
+        if (!user) return;
+        updateUser(username, user.username, user.role, { recordEnabled: !user.recordEnabled });
+      } else if (action === "view") {
+        const user = getCachedUser(username);
+        if (!user) return;
+        updateUser(username, user.username, user.role, { canViewRecords: !user.canViewRecords });
       } else if (action === "delete") {
         if (window.confirm(`确定要删除用户 ${username} 吗？`)) {
           deleteUser(username);
@@ -2726,7 +2801,6 @@
         processLabel
       };
 
-      persistQuoteResult(lastQuote);
     });
 
     document.getElementById("resetBtn").addEventListener("click", () => {
@@ -2740,6 +2814,7 @@
         alert("请先计算一次报价，再导出报价单。");
         return;
       }
+      persistQuoteResult(lastQuote);
       const now = new Date();
       const dateStr = now.toLocaleString("zh-CN");
       const lines = [
@@ -2796,9 +2871,15 @@
             alert("仅管理员可访问，请先使用管理员账户登录。");
             return;
           }
-          if (btn.dataset.main === "recordsMain" && !isAuthenticated()) {
-            alert("请先登录后查看报价记录。");
-            return;
+          if (btn.dataset.main === "recordsMain") {
+            if (!isAuthenticated()) {
+              alert("请先登录后查看报价记录。");
+              return;
+            }
+            if (!isAdmin && !canViewRecords) {
+              alert("当前账号无查看报价记录的权限，请联系管理员开启。");
+              return;
+            }
           }
           setMainTab(btn);
         });

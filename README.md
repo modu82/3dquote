@@ -59,12 +59,12 @@
 - `POST /api/settings`：更新报价配置，需在请求头携带有效管理员会话（支持 `X-Session` 或 `X-Admin-Session`）。
 - `POST /api/auth/login` / `POST /api/auth/logout` / `GET /api/auth/status`：统一登录/登出与会话状态查询，根据用户名返回 `role`（`user` 或 `admin`）。
 - `POST /api/admin/change-password`：管理员修改自身密码，需有效管理员会话。
-- `GET /api/admin/users` / `POST /api/admin/users`：管理员获取/创建用户（含角色、启用状态）。
-- `PUT /api/admin/users/{username}` / `DELETE /api/admin/users/{username}`：管理员编辑用户名/角色或删除账号，自动校验至少保留一名启用的管理员。
+- `GET /api/admin/users` / `POST /api/admin/users`：管理员获取/创建用户（含角色、启用状态、是否记录报价、是否可查看记录）。
+- `PUT /api/admin/users/{username}` / `DELETE /api/admin/users/{username}`：管理员编辑用户名/角色、记录开关或删除账号，自动校验至少保留一名启用的管理员。
 - `POST /api/admin/users/{username}/toggle`：启用或禁用指定用户。
 - `POST /api/admin/users/{username}/reset-password`：重置用户密码。
-- `POST /api/quotes`：保存一次报价记录，自动记录创建人，可指定可见范围（仅管理员/全部登录用户/仅创建人）和“是否采用”状态。
- - `GET /api/quotes`：登录用户可按权限查看报价记录，支持按月份、创建人、可见范围及采用状态筛选；管理员可管理全部记录。
+- `POST /api/quotes`：导出报价单时保存一次报价记录，自动记录创建人，可指定可见范围（仅管理员/全部登录用户/仅创建人）和“是否采用”状态，若账号被管理员关闭记录开关则拒绝写入。
+- `GET /api/quotes`：具备权限的登录用户可按月份/创建人筛选报价记录，管理员可追加按可见范围、采用状态筛选并管理全部记录。
  - `PATCH /api/quotes/{id}` / `DELETE /api/quotes/{id}`：管理员更新记录可见范围/采用状态或删除。
  - `GET /api/quotes/summary`：管理员查看按月汇总的报价数量与金额。
 

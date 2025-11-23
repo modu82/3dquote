@@ -91,6 +91,8 @@ class Account(BaseModel):
     password_hash: str
     role: Literal["admin", "user"] = "user"
     active: bool = True
+    recordEnabled: bool = True
+    canViewRecords: bool = False
 
 
 class LoginRequest(BaseModel):
@@ -102,6 +104,8 @@ class LoginResponse(BaseModel):
     token: str
     username: str
     role: Literal["admin", "user"]
+    recordEnabled: bool
+    canViewRecords: bool
 
 
 class ChangePasswordRequest(BaseModel):
@@ -367,6 +371,8 @@ def load_accounts() -> List[Account]:
             password_hash=hash_password(DEFAULT_ADMIN_PASS, salt_admin),
             role="admin",
             active=True,
+            recordEnabled=True,
+            canViewRecords=True,
         ),
         Account(
             username=DEFAULT_USER_USER,
@@ -374,6 +380,8 @@ def load_accounts() -> List[Account]:
             password_hash=hash_password(DEFAULT_USER_PASS, salt_user),
             role="user",
             active=True,
+            recordEnabled=True,
+            canViewRecords=False,
         ),
     ]
     save_accounts(defaults)
@@ -534,7 +542,13 @@ def auth_login(body: LoginRequest):
         raise HTTPException(status_code=401, detail="用户名或密码错误")
 
     token = create_session(account.username, account.role)
-    return LoginResponse(token=token, username=account.username, role=account.role)
+    return LoginResponse(
+        token=token,
+        username=account.username,
+        role=account.role,
+        recordEnabled=account.recordEnabled,
+        canViewRecords=account.canViewRecords,
+    )
 
 
 @app.post("/api/auth/logout")
@@ -561,10 +575,13 @@ def auth_status(
         or get_session_from_token(x_user_session)
     )
     is_authed = bool(session) and session.get("role") in {"user", "admin"}
+    account = get_account(session.get("username")) if session else None
     return {
         "authenticated": is_authed,
         "username": session.get("username") if is_authed and session else None,
         "role": session.get("role") if is_authed and session else None,
+        "recordEnabled": account.recordEnabled if account else None,
+        "canViewRecords": account.canViewRecords if account else None,
     }
 
 
@@ -610,6 +627,8 @@ class UserPublic(BaseModel):
     username: str
     role: Literal["admin", "user"]
     active: bool
+    recordEnabled: bool
+    canViewRecords: bool
 
 
 class ManageUserCreate(BaseModel):
@@ -617,6 +636,8 @@ class ManageUserCreate(BaseModel):
     password: str
     role: Literal["admin", "user"] = "user"
     active: bool = True
+    recordEnabled: bool = True
+    canViewRecords: bool = False
 
 
 class ManageUserToggle(BaseModel):
@@ -630,6 +651,8 @@ class ManageUserReset(BaseModel):
 class ManageUserUpdate(BaseModel):
     newUsername: Optional[str] = None
     role: Optional[Literal["admin", "user"]] = None
+    recordEnabled: Optional[bool] = None
+    canViewRecords: Optional[bool] = None
 
 
 @app.get("/api/admin/users", response_model=List[UserPublic])
@@ -639,7 +662,16 @@ def list_users(
     x_session: Optional[str] = Header(None),
 ):
     require_admin(x_admin_session, x_user_session, x_session)
-    return [UserPublic(username=a.username, role=a.role, active=a.active) for a in ACCOUNTS]
+    return [
+        UserPublic(
+            username=a.username,
+            role=a.role,
+            active=a.active,
+            recordEnabled=a.recordEnabled,
+            canViewRecords=a.canViewRecords,
+        )
+        for a in ACCOUNTS
+    ]
 
 
 @app.post("/api/admin/users", response_model=UserPublic)
@@ -660,10 +692,18 @@ def create_user(
         password_hash=pwd_hash,
         role=body.role,
         active=body.active,
+        recordEnabled=body.recordEnabled,
+        canViewRecords=body.canViewRecords,
     )
     updated = ACCOUNTS + [new_account]
     _persist_accounts(updated)
-    return UserPublic(username=new_account.username, role=new_account.role, active=new_account.active)
+    return UserPublic(
+        username=new_account.username,
+        role=new_account.role,
+        active=new_account.active,
+        recordEnabled=new_account.recordEnabled,
+        canViewRecords=new_account.canViewRecords,
+    )
 
 
 @app.post("/api/admin/users/{username}/toggle", response_model=UserPublic)
@@ -696,6 +736,8 @@ def toggle_user(
                     password_hash=acc.password_hash,
                     role=acc.role,
                     active=body.active,
+                    recordEnabled=acc.recordEnabled,
+                    canViewRecords=acc.canViewRecords,
                 )
             )
         else:
@@ -704,7 +746,13 @@ def toggle_user(
     _persist_accounts(updated_accounts)
     if not body.active:
         invalidate_sessions_for(username)
-    return UserPublic(username=username, role=account.role, active=body.active)
+    return UserPublic(
+        username=username,
+        role=account.role,
+        active=body.active,
+        recordEnabled=account.recordEnabled,
+        canViewRecords=account.canViewRecords,
+    )
 
 
 @app.post("/api/admin/users/{username}/reset-password")
@@ -731,6 +779,8 @@ def reset_user_password(
                     password_hash=new_hash,
                     role=acc.role,
                     active=acc.active,
+                    recordEnabled=acc.recordEnabled,
+                    canViewRecords=acc.canViewRecords,
                 )
             )
         else:
@@ -755,6 +805,8 @@ def update_user(
 
     new_username = body.newUsername.strip() if body.newUsername else account.username
     new_role = body.role or account.role
+    new_record_enabled = account.recordEnabled if body.recordEnabled is None else bool(body.recordEnabled)
+    new_view_permission = account.canViewRecords if body.canViewRecords is None else bool(body.canViewRecords)
 
     if new_username != username and get_account(new_username):
         raise HTTPException(status_code=400, detail="用户名已存在")
@@ -776,6 +828,8 @@ def update_user(
                     password_hash=acc.password_hash,
                     role=new_role,
                     active=acc.active,
+                    recordEnabled=new_record_enabled,
+                    canViewRecords=new_view_permission,
                 )
             )
         else:
@@ -785,7 +839,13 @@ def update_user(
         invalidate_sessions_for(username)
     if new_role != account.role:
         invalidate_sessions_for(new_username)
-    return UserPublic(username=new_username, role=new_role, active=account.active)
+    return UserPublic(
+        username=new_username,
+        role=new_role,
+        active=account.active,
+        recordEnabled=new_record_enabled,
+        canViewRecords=new_view_permission,
+    )
 
 
 @app.delete("/api/admin/users/{username}")
@@ -821,6 +881,9 @@ def create_quote_record(
 ):
     """保存一次报价结果，用于后续对账和统计。"""
     session = require_authenticated(x_user_session, x_admin_session, x_session)
+    account = get_account(session.get("username", ""))
+    if not account or not account.recordEnabled:
+        raise HTTPException(status_code=403, detail="当前账号的报价记录功能已被禁用")
     is_admin = session.get("role") == "admin"
     visibility = (
         body.visibility if is_admin and body.visibility in ("admin_only", "all_users", "owner_only") else None
@@ -856,6 +919,9 @@ def list_quote_records(
 ):
     """分页查询报价记录，支持按月份、创建人、采用状态与可见性过滤。"""
     session = require_authenticated(x_user_session, x_admin_session, x_session)
+    account = get_account(session.get("username", ""))
+    if session.get("role") != "admin" and (not account or not account.canViewRecords):
+        raise HTTPException(status_code=403, detail="无权查看报价记录")
     if session.get("role") != "admin":
         visibility = None
     page = max(page, 1)
