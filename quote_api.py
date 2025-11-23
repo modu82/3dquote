@@ -377,9 +377,6 @@ def load_accounts() -> List[Account]:
 
 ACCOUNTS: List[Account] = load_accounts()
 
-
-USER_ACCOUNT: UserAccount = load_user_account()
-
 # ====== 简单 Session 管理（保存在内存） ======
 
 SESSIONS: Dict[str, Dict[str, str]] = {}  # token -> {username, role}
