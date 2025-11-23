@@ -14,7 +14,7 @@
 - 🧵 支持多种工艺与厂商：FDM/光固化 3D 打印、CNC 雕刻、CO₂ 激光雕刻/切割等，可按厂商和工艺分类材料、设备。
 - ⚙️ 细致的成本参数：材料单价、设备小时费用、电费、人工/管理成本、人机比等。
 - 🧩 后处理规则：按重量/件数估算打磨、上色等额外耗时与成本，可按工艺区分并设置成本系数。
-- 🔐 管理员模式：登录后可在线调整配置、修改密码；配置信息与管理员账号保存在 `./data/` 目录。
+- 🔐 登录与权限：普通用户登录后才能使用报价计算；管理员登录可管理配置、查看报价记录并修改密码，账号信息保存在 `./data/`。
 
 ---
 
@@ -49,19 +49,20 @@
    ```
 3. 同样在 `3d_quote.html` 内将 `API_BASE` 指向你的后端地址。
 
-> 可通过环境变量 `ADMIN_USER` 和 `ADMIN_PASS` 调整默认管理员账号（默认 `admin / changeme`）。首次启动时会在 `./data/admin_account.json` 中生成账号文件，后续修改需删除该文件或使用管理员界面改密。
+> 可通过环境变量 `ADMIN_USER` 和 `ADMIN_PASS` 调整默认管理员账号（默认 `admin / changeme`），通过 `USER_USER` 和 `USER_PASS` 调整默认普通用户账号（默认 `user / 123456`）。首次启动时会在 `./data/admin_account.json` 与 `./data/user_account.json` 中生成账号文件。
 
 ---
 
 ## API 概览
 
-- `GET /api/settings`：公开获取当前报价配置（材料、设备、利润率、后处理规则等）。
+- `GET /api/settings`：登录后获取当前报价配置（材料、设备、利润率、后处理规则等）。
 - `POST /api/settings`：更新报价配置，需在请求头携带 `X-Admin-Session`。
+- `POST /api/user/login` / `POST /api/user/logout` / `GET /api/user/status`：普通用户登录、退出、查询会话状态。
 - `POST /api/admin/login`：管理员登录，返回 `token`，后续请求需放入 `X-Admin-Session` 头。
 - `POST /api/admin/logout`：注销当前会话。
 - `GET /api/admin/status`：查询 session 是否有效。
 - `POST /api/admin/change-password`：修改管理员密码，需有效会话并提供旧密码。
-- `POST /api/quotes`：保存一次报价记录，便于后续统计（对所有用户开放）。
+- `POST /api/quotes`：保存一次报价记录，需登录用户或管理员。
 - `GET /api/quotes`：管理员查看报价记录，支持分页与按月份筛选。
 - `GET /api/quotes/summary`：管理员查看按月汇总的报价数量与金额。
 

@@ -22,13 +22,18 @@ app.add_middleware(
 
 SETTINGS_FILE = "/data/settings.json"
 ACCOUNT_FILE = "/data/admin_account.json"
+USER_ACCOUNT_FILE = "/data/user_account.json"
 QUOTES_FILE = "/data/quotes.json"
 
 # 初始管理员信息（如果 ACCOUNT_FILE 不存在，就用这个创建）
 DEFAULT_ADMIN_USER = os.getenv("ADMIN_USER", "admin")
 DEFAULT_ADMIN_PASS = os.getenv("ADMIN_PASS", "changeme")
 
+DEFAULT_USER_USER = os.getenv("USER_USER", "user")
+DEFAULT_USER_PASS = os.getenv("USER_PASS", "123456")
+
 SESSION_HEADER = "X-Admin-Session"
+USER_SESSION_HEADER = "X-User-Session"
 
 
 # ====== Pydantic 模型 ======
@@ -82,6 +87,10 @@ class AdminAccount(BaseModel):
     username: str
     salt: str
     password_hash: str
+
+
+class UserAccount(AdminAccount):
+    pass
 
 
 class LoginRequest(BaseModel):
@@ -326,9 +335,38 @@ def save_admin_account(account: AdminAccount):
 
 ADMIN_ACCOUNT: AdminAccount = load_admin_account()
 
+
+def load_user_account() -> UserAccount:
+    """从文件读取普通用户账户，不存在则用默认用户名/密码创建。"""
+    if os.path.exists(USER_ACCOUNT_FILE):
+        try:
+            with open(USER_ACCOUNT_FILE, "r", encoding="utf-8") as f:
+                data = json.load(f)
+            return UserAccount(**data)
+        except Exception as e:
+            print("Failed to load user_account.json, using default user:", e)
+
+    salt = secrets.token_hex(16)
+    password_hash = hash_password(DEFAULT_USER_PASS, salt)
+    account = UserAccount(username=DEFAULT_USER_USER, salt=salt, password_hash=password_hash)
+    save_user_account(account)
+    print(
+        f"[INIT] Created default user account username={DEFAULT_USER_USER}, password={DEFAULT_USER_PASS}"
+    )
+    return account
+
+
+def save_user_account(account: UserAccount):
+    os.makedirs(os.path.dirname(USER_ACCOUNT_FILE), exist_ok=True)
+    with open(USER_ACCOUNT_FILE, "w", encoding="utf-8") as f:
+        json.dump(account.dict(), f, ensure_ascii=False, indent=2)
+
+
+USER_ACCOUNT: UserAccount = load_user_account()
+
 # ====== 简单 Session 管理（保存在内存） ======
 
-SESSIONS: Dict[str, str] = {}  # token -> username
+SESSIONS: Dict[str, Dict[str, str]] = {}  # token -> {username, role}
 
 
 def load_quote_records() -> List[QuoteRecord]:
@@ -355,36 +393,54 @@ def save_quote_records(records: List[QuoteRecord]):
         json.dump([r.dict() for r in records], f, ensure_ascii=False, indent=2)
 
 
-def create_session(username: str) -> str:
+def create_session(username: str, role: str) -> str:
     token = uuid4().hex + secrets.token_hex(8)
-    SESSIONS[token] = username
+    SESSIONS[token] = {"username": username, "role": role}
     return token
 
 
-def get_username_from_session_token(token: Optional[str]) -> Optional[str]:
+def get_session_from_token(token: Optional[str]) -> Optional[Dict[str, str]]:
     if not token:
         return None
     return SESSIONS.get(token)
 
 
-def require_admin(token: Optional[str]) -> str:
-    """检查 session token 是否有效，返回用户名；无效则抛异常。"""
-    username = get_username_from_session_token(token)
-    if not username:
+def require_admin(token: Optional[str]) -> Dict[str, str]:
+    session = get_session_from_token(token)
+    if not session:
         raise HTTPException(status_code=401, detail="未登录或会话已失效")
-    return username
+    if session.get("role") != "admin":
+        raise HTTPException(status_code=403, detail="没有管理员权限")
+    return session
+
+
+def require_authenticated(
+    user_token: Optional[str], admin_token: Optional[str]
+) -> Dict[str, str]:
+    session = get_session_from_token(admin_token) or get_session_from_token(user_token)
+    if not session:
+        raise HTTPException(status_code=401, detail="未登录或会话已失效")
+    return session
 
 
 # ====== API：公开的设置读取 & 受保护的设置修改 ======
 
 @app.get("/api/settings", response_model=Settings)
-def get_settings():
-    """所有人都可以读取设置（用于报价）。"""
+def get_settings(
+    x_user_session: Optional[str] = Header(None),
+    x_admin_session: Optional[str] = Header(None),
+):
+    """登录后才能读取设置（用于报价）。"""
+    require_authenticated(x_user_session, x_admin_session)
     return load_settings()
 
 
 @app.post("/api/settings", response_model=Settings)
-def update_settings(settings: Settings, x_admin_session: Optional[str] = Header(None)):
+def update_settings(
+    settings: Settings,
+    x_user_session: Optional[str] = Header(None),
+    x_admin_session: Optional[str] = Header(None),
+):
     """只有登录的管理员才能修改设置。"""
     if len(settings.materials) == 0:
         raise HTTPException(status_code=400, detail="至少需要一个材料")
@@ -411,7 +467,7 @@ def admin_login(body: LoginRequest):
     if not verify_password(body.password, ADMIN_ACCOUNT.salt, ADMIN_ACCOUNT.password_hash):
         raise HTTPException(status_code=401, detail="用户名或密码错误")
 
-    token = create_session(ADMIN_ACCOUNT.username)
+    token = create_session(ADMIN_ACCOUNT.username, "admin")
     return LoginResponse(token=token, username=ADMIN_ACCOUNT.username)
 
 
@@ -426,10 +482,11 @@ def admin_logout(x_admin_session: Optional[str] = Header(None)):
 @app.get("/api/admin/status")
 def admin_status(x_admin_session: Optional[str] = Header(None)):
     """检查当前 session 是否已登录。"""
-    username = get_username_from_session_token(x_admin_session)
+    session = get_session_from_token(x_admin_session)
+    is_admin = bool(session) and session.get("role") == "admin"
     return {
-        "authenticated": bool(username),
-        "username": username,
+        "authenticated": is_admin,
+        "username": session.get("username") if is_admin and session else None,
     }
 
 
@@ -438,7 +495,7 @@ def admin_change_password(body: ChangePasswordRequest, x_admin_session: Optional
     """修改管理员密码：需要已经登录，并提供旧密码、新密码。"""
     global ADMIN_ACCOUNT
 
-    username = require_admin(x_admin_session)
+    session = require_admin(x_admin_session)
 
     # 再用旧密码校验一遍
     if not verify_password(body.oldPassword, ADMIN_ACCOUNT.salt, ADMIN_ACCOUNT.password_hash):
@@ -446,7 +503,7 @@ def admin_change_password(body: ChangePasswordRequest, x_admin_session: Optional
 
     new_salt = secrets.token_hex(16)
     new_hash = hash_password(body.newPassword, new_salt)
-    ADMIN_ACCOUNT = AdminAccount(username=username, salt=new_salt, password_hash=new_hash)
+    ADMIN_ACCOUNT = AdminAccount(username=session["username"], salt=new_salt, password_hash=new_hash)
     save_admin_account(ADMIN_ACCOUNT)
 
     # 可选：所有已有 session 失效
@@ -455,12 +512,57 @@ def admin_change_password(body: ChangePasswordRequest, x_admin_session: Optional
     return {"message": "密码已更新，请使用新密码重新登录"}
 
 
+# ====== 普通用户登录 / 状态 ======
+
+
+@app.post("/api/user/login", response_model=LoginResponse)
+def user_login(body: LoginRequest):
+    """普通用户登录：返回用户会话 token。"""
+    global USER_ACCOUNT
+
+    if body.username != USER_ACCOUNT.username:
+        raise HTTPException(status_code=401, detail="用户名或密码错误")
+
+    if not verify_password(body.password, USER_ACCOUNT.salt, USER_ACCOUNT.password_hash):
+        raise HTTPException(status_code=401, detail="用户名或密码错误")
+
+    token = create_session(USER_ACCOUNT.username, "user")
+    return LoginResponse(token=token, username=USER_ACCOUNT.username)
+
+
+@app.post("/api/user/logout")
+def user_logout(x_user_session: Optional[str] = Header(None)):
+    """普通用户退出登录。"""
+    if x_user_session and x_user_session in SESSIONS:
+        del SESSIONS[x_user_session]
+    return {"message": "已退出登录"}
+
+
+@app.get("/api/user/status")
+def user_status(
+    x_user_session: Optional[str] = Header(None),
+    x_admin_session: Optional[str] = Header(None),
+):
+    """检查普通用户是否已登录；管理员 token 也视为已登录。"""
+    session = get_session_from_token(x_admin_session) or get_session_from_token(x_user_session)
+    is_authed = bool(session) and session.get("role") in {"user", "admin"}
+    return {
+        "authenticated": is_authed,
+        "username": session.get("username") if is_authed and session else None,
+    }
+
+
 # ====== 报价记录：创建 / 查询 / 统计 ======
 
 
 @app.post("/api/quotes", response_model=QuoteRecord)
-def create_quote_record(body: QuoteRecordCreate):
+def create_quote_record(
+    body: QuoteRecordCreate,
+    x_user_session: Optional[str] = Header(None),
+    x_admin_session: Optional[str] = Header(None),
+):
     """保存一次报价结果，用于后续对账和统计。"""
+    require_authenticated(x_user_session, x_admin_session)
     existing = load_quote_records()
     record = QuoteRecord(
         **body.dict(),

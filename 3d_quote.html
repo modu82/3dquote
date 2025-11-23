@@ -41,9 +41,51 @@
       gap: 6px;
       color: #666;
     }
+    .auth-bar {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 10px;
+      background: #0f172a;
+      color: #fff;
+      padding: 10px 12px;
+      border-radius: 12px;
+      margin-bottom: 12px;
+    }
+    .auth-meta {
+      font-size: 13px;
+      color: #e5e7eb;
+    }
+    .auth-actions {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
     .admin-name {
       font-size: 12px;
       color: #555;
+    }
+    .login-panel {
+      background: linear-gradient(135deg, #0b1220, #111827);
+      color: #e5e7eb;
+      padding: 18px;
+      border-radius: 14px;
+      margin-bottom: 16px;
+      box-shadow: inset 0 1px 0 rgba(255,255,255,.05), 0 18px 30px rgba(0,0,0,.12);
+    }
+    .login-panel h3 {
+      margin: 0 0 8px;
+      color: #fff;
+    }
+    .login-panel label { color: #cbd5e1; }
+    .login-row {
+      display: grid;
+      grid-template-columns: 1fr 1fr auto;
+      gap: 10px;
+      align-items: end;
+    }
+    @media (max-width: 640px) {
+      .login-row { grid-template-columns: 1fr; }
     }
     .grid {
       display: grid;
@@ -278,16 +320,19 @@
     .page-tab {
       padding: 8px 14px;
       border-radius: 999px;
-      border: 1px solid #d0d0d5;
-      background: #f7f7f9;
+      border: 1px solid #111827;
+      background: #111827;
+      color: #f8fafc;
       cursor: pointer;
       font-size: 13px;
+      transition: background 0.15s ease, color 0.15s ease, border-color 0.15s ease;
     }
     .page-tab.active {
       background: #0070f3;
       color: #fff;
       border-color: #0070f3;
     }
+    .page-tab:hover { background: #1f2937; }
     .section { display: none; }
     .section.active { display: block; }
     .pager {
@@ -309,21 +354,43 @@
     }
   </style>
 </head>
-<body>
+  <body>
   <div class="container">
-    <!-- 管理员栏 -->
-    <div class="admin-bar">
-      <span class="admin-name" id="adminName"></span>
-      <button type="button" class="mini-btn" id="adminAuthBtn">管理员登录</button>
-    </div>
-
     <h1>通用加工报价计算器</h1>
     <div class="subtitle">根据工艺选择对应材料与设备，快速估算成本与利润</div>
 
+    <div class="auth-bar" id="authBar">
+      <div class="auth-meta" id="userStatus">请先登录后使用报价功能。</div>
+      <div class="auth-actions">
+        <button type="button" class="mini-btn" id="userLogoutBtn" style="display:none;">退出登录</button>
+        <button type="button" class="mini-btn" id="adminAuthBtn">管理员登录</button>
+      </div>
+    </div>
+
+    <div class="login-panel" id="loginPanel">
+      <h3>登录后开始使用</h3>
+      <div class="login-row">
+        <div>
+          <label for="userLoginName">用户名</label>
+          <input id="userLoginName" type="text" placeholder="请输入用户名" />
+        </div>
+        <div>
+          <label for="userLoginPassword">密码</label>
+          <input id="userLoginPassword" type="password" placeholder="请输入密码" />
+        </div>
+        <button type="button" id="userLoginBtn">用户登录</button>
+      </div>
+      <div class="hint">普通用户登录后可进行报价计算；管理员点击右侧按钮登录后可管理配置和记录。</div>
+    </div>
+
+    <div id="appContent" style="display:none;">
+
     <div class="page-tabs">
       <button class="page-tab active" data-section="quoteSection">报价计算</button>
-      <button class="page-tab" data-section="settingsSection">参数配置</button>
-      <button class="page-tab" data-section="recordsSection">报价记录</button>
+      <button class="page-tab" data-section="paramsSection" data-require-admin="true">参数配置</button>
+      <button class="page-tab" data-section="materialsSection" data-require-admin="true">材料设置</button>
+      <button class="page-tab" data-section="machinesSection" data-require-admin="true">设备设置</button>
+      <button class="page-tab" data-section="recordsSection" data-require-admin="true">报价记录</button>
     </div>
 
     <div class="section active" id="quoteSection">
@@ -432,7 +499,7 @@
     </div> <!-- /quoteSection -->
 
     <!-- 管理员设置区域（登录后可见） -->
-    <div class="settings section" id="settingsSection">
+    <div class="settings section" id="paramsSection" data-require-admin="true">
       <h3>
         全局参数
         <div>
@@ -502,9 +569,9 @@
         -
         <button id="addPostProcessBtn" class="btn-sub">新增后处理等级</button>
       </h3>
+    </div>
 
-
-
+    <div class="settings section" id="materialsSection" data-require-admin="true">
       <!-- 材料设置 -->
       <h3 style="display:flex;justify-content:space-between;align-items:center;">
         材料设置
@@ -548,9 +615,9 @@
         -
         <button id="addMaterialBtn" class="btn-sub">新增材料</button>
       </h3>
-              
+    </div>
 
-
+    <div class="settings section" id="machinesSection" data-require-admin="true">
       <!-- 设备设置 -->
       <h3 style="display:flex;justify-content:space-between;align-items:center;">
         设备设置
@@ -603,7 +670,7 @@
       </h3>
     </div>
 
-    <div class="section" id="recordsSection">
+    <div class="section" id="recordsSection" data-require-admin="true">
       <h3>报价记录</h3>
       <small>需要管理员登录后查看和统计；每次计算完成会自动保存一条记录。</small>
       <div class="inline-config">
@@ -628,6 +695,7 @@
       <div id="recordsList"></div>
       <h4>月度汇总</h4>
       <div id="recordsSummary"></div>
+    </div>
     </div>
   </div>
 
@@ -684,13 +752,18 @@
     let runtimeConfig = JSON.parse(JSON.stringify(CLIENT_DEFAULTS));
     let lastQuote = null;
 
+    const USER_SESSION_KEY = "quote_user_session";
     const ADMIN_SESSION_KEY = "quote_admin_session";
     const MATERIALS_PAGE_SIZE_KEY = "quote_materials_page_size";
     const MACHINES_PAGE_SIZE_KEY = "quote_machines_page_size";
     const RECORDS_PAGE_SIZE_KEY = "quote_records_page_size";
+    let userSessionToken = localStorage.getItem(USER_SESSION_KEY) || null;
     let adminSessionToken = localStorage.getItem(ADMIN_SESSION_KEY) || null;
+    let isUser = false;
     let isAdmin = false;
+    let userUsername = "";
     let adminUsername = "";
+    let settingsLoaded = false;
 
     let currentMaterialsVendor = VENDOR_FILTER_ALL;
     let currentMachinesVendor = VENDOR_FILTER_ALL;
@@ -706,6 +779,17 @@
 
     function formatMoney(v) {
       return "¥" + v.toFixed(2);
+    }
+
+    function authHeaders() {
+      const headers = {};
+      if (userSessionToken) headers["X-User-Session"] = userSessionToken;
+      if (adminSessionToken) headers["X-Admin-Session"] = adminSessionToken;
+      return headers;
+    }
+
+    function isAuthenticated() {
+      return isUser || isAdmin;
     }
 
     function isProcessMatch(itemProcess, current) {
@@ -1537,7 +1621,8 @@
 
     async function loadSettingsFromServer() {
       try {
-        const resp = await fetch(`${API_BASE}/settings`);
+        if (!isAuthenticated()) throw new Error("未登录");
+        const resp = await fetch(`${API_BASE}/settings`, { headers: authHeaders() });
         if (!resp.ok) throw new Error("HTTP " + resp.status);
         const data = await resp.json();
         runtimeConfig.defaultProfitMargin = data.defaultProfitMargin;
@@ -1566,26 +1651,49 @@
       } catch (e) {
         console.warn("加载服务器设置失败，使用前端默认值:", e);
       }
+      settingsLoaded = true;
       initSettingsFromRuntime();
     }
 
-    // ===== 管理员登录 / 状态 =====
-    function updateAdminUI() {
-      const settingsSection = document.getElementById("settingsSection");
-      const recordsSection = document.getElementById("recordsSection");
-      const adminBtn = document.getElementById("adminAuthBtn");
-      const adminNameSpan = document.getElementById("adminName");
+    // ===== 登录 / 权限控制 =====
+    function setActiveTab(btn) {
+      if (!btn) return;
+      document.querySelectorAll(".page-tab").forEach(b => b.classList.remove("active"));
+      document.querySelectorAll(".section").forEach(sec => sec.classList.remove("active"));
+      btn.classList.add("active");
+      const id = btn.getAttribute("data-section");
+      const target = document.getElementById(id);
+      if (target) target.classList.add("active");
+    }
 
-      if (isAdmin) {
-        settingsSection.style.display = "";
-        if (recordsSection) recordsSection.style.display = "";
-        adminBtn.textContent = "退出登录";
-        adminNameSpan.textContent = adminUsername ? `已登录：${adminUsername}` : "已登录";
-      } else {
-        settingsSection.style.display = "none";
-        if (recordsSection) recordsSection.style.display = "none";
-        adminBtn.textContent = "管理员登录";
-        adminNameSpan.textContent = "";
+    function updateAuthUI() {
+      const loginPanel = document.getElementById("loginPanel");
+      const appContent = document.getElementById("appContent");
+      const statusEl = document.getElementById("userStatus");
+      const logoutBtn = document.getElementById("userLogoutBtn");
+      const adminBtn = document.getElementById("adminAuthBtn");
+
+      const authed = isAuthenticated();
+      if (loginPanel) loginPanel.style.display = authed ? "none" : "";
+      if (appContent) appContent.style.display = authed ? "" : "none";
+      if (logoutBtn) logoutBtn.style.display = authed ? "" : "none";
+
+      if (statusEl) {
+        if (isAdmin) statusEl.textContent = `管理员已登录：${adminUsername || ""}`;
+        else if (isUser) statusEl.textContent = `已登录用户：${userUsername || ""}`;
+        else statusEl.textContent = "请先登录后使用报价功能。";
+      }
+
+      if (adminBtn) adminBtn.textContent = isAdmin ? "退出管理员" : "管理员登录";
+
+      document.querySelectorAll("[data-require-admin]").forEach(el => {
+        el.style.display = isAdmin ? "" : "none";
+      });
+
+      const activeTab = document.querySelector(".page-tab.active");
+      if (activeTab && activeTab.dataset.requireAdmin && !isAdmin) {
+        const quoteTab = document.querySelector('.page-tab[data-section="quoteSection"]');
+        setActiveTab(quoteTab);
       }
     }
 
@@ -1593,7 +1701,6 @@
       if (!adminSessionToken) {
         isAdmin = false;
         adminUsername = "";
-        updateAdminUI();
         return;
       }
       try {
@@ -1615,8 +1722,48 @@
         console.warn("检查管理员状态失败:", e);
         isAdmin = false;
         adminUsername = "";
+        adminSessionToken = null;
+        localStorage.removeItem(ADMIN_SESSION_KEY);
       }
-      updateAdminUI();
+    }
+
+    async function checkUserStatus() {
+      if (!userSessionToken) {
+        isUser = false;
+        userUsername = "";
+        return;
+      }
+      try {
+        const resp = await fetch(`${API_BASE}/user/status`, {
+          headers: { "X-User-Session": userSessionToken }
+        });
+        if (!resp.ok) throw new Error("HTTP " + resp.status);
+        const data = await resp.json();
+        if (data.authenticated) {
+          isUser = true;
+          userUsername = data.username || "";
+        } else {
+          isUser = false;
+          userUsername = "";
+          userSessionToken = null;
+          localStorage.removeItem(USER_SESSION_KEY);
+        }
+      } catch (e) {
+        console.warn("检查用户状态失败:", e);
+        isUser = false;
+        userUsername = "";
+        userSessionToken = null;
+        localStorage.removeItem(USER_SESSION_KEY);
+      }
+    }
+
+    async function refreshAuthState(forceReload = false) {
+      await checkAdminStatus();
+      await checkUserStatus();
+      updateAuthUI();
+      if (isAuthenticated() && (forceReload || !settingsLoaded)) {
+        await loadSettingsFromServer();
+      }
       if (isAdmin) {
         renderQuoteRecords();
         renderQuoteSummary();
@@ -1628,7 +1775,7 @@
       const params = new URLSearchParams({ page: String(recordsPage), pageSize: String(recordsPageSize) });
       if (month) params.append("month", month);
       const resp = await fetch(`${API_BASE}/quotes?${params.toString()}`, {
-        headers: adminSessionToken ? { "X-Admin-Session": adminSessionToken } : {}
+        headers: authHeaders()
       });
       if (!resp.ok) throw new Error("无法获取报价记录，请确认已登录管理员");
       return resp.json();
@@ -1637,7 +1784,7 @@
     async function fetchQuoteSummary() {
       const now = new Date();
       const resp = await fetch(`${API_BASE}/quotes/summary?year=${now.getFullYear()}`, {
-        headers: adminSessionToken ? { "X-Admin-Session": adminSessionToken } : {}
+        headers: authHeaders()
       });
       if (!resp.ok) throw new Error("无法获取汇总，请确认已登录管理员");
       return resp.json();
@@ -1693,7 +1840,7 @@
       try {
         await fetch(`${API_BASE}/quotes`, {
           method: "POST",
-          headers: { "Content-Type": "application/json" },
+          headers: { "Content-Type": "application/json", ...authHeaders() },
           body: JSON.stringify({
             processType: quote.processType,
             processLabel: quote.processLabel,
@@ -1723,6 +1870,55 @@
       }
     }
 
+    async function userLoginFlow() {
+      const username = document.getElementById("userLoginName").value.trim();
+      const password = document.getElementById("userLoginPassword").value;
+      if (!username || !password) {
+        alert("请输入用户名和密码");
+        return;
+      }
+
+      try {
+        const resp = await fetch(`${API_BASE}/user/login`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ username, password })
+        });
+        if (!resp.ok) {
+          const err = await resp.json().catch(() => ({}));
+          throw new Error(err.detail || "登录失败");
+        }
+        const data = await resp.json();
+        userSessionToken = data.token;
+        userUsername = data.username;
+        isUser = true;
+        localStorage.setItem(USER_SESSION_KEY, userSessionToken);
+        await refreshAuthState(true);
+        alert("登录成功");
+      } catch (e) {
+        alert("登录失败：" + e.message);
+      }
+    }
+
+    async function userLogoutFlow() {
+      if (userSessionToken) {
+        try {
+          await fetch(`${API_BASE}/user/logout`, {
+            method: "POST",
+            headers: { "X-User-Session": userSessionToken }
+          });
+        } catch (e) {
+          console.warn("用户登出失败：", e);
+        }
+      }
+      userSessionToken = null;
+      isUser = false;
+      userUsername = "";
+      localStorage.removeItem(USER_SESSION_KEY);
+      if (!isAdmin) settingsLoaded = false;
+      updateAuthUI();
+    }
+
     async function adminLoginFlow() {
       const username = window.prompt("请输入管理员用户名：", "admin");
       if (!username) return;
@@ -1744,7 +1940,7 @@
         adminUsername = data.username;
         isAdmin = true;
         localStorage.setItem(ADMIN_SESSION_KEY, adminSessionToken);
-        updateAdminUI();
+        await refreshAuthState(true);
         alert("登录成功");
       } catch (e) {
         alert("登录失败：" + e.message);
@@ -1755,7 +1951,7 @@
       if (!adminSessionToken) {
         isAdmin = false;
         adminUsername = "";
-        updateAdminUI();
+        updateAuthUI();
         return;
       }
       try {
@@ -1770,7 +1966,8 @@
       isAdmin = false;
       adminUsername = "";
       localStorage.removeItem(ADMIN_SESSION_KEY);
-      updateAdminUI();
+      updateAuthUI();
+      if (!isAuthenticated()) settingsLoaded = false;
     }
 
     document.getElementById("adminAuthBtn").addEventListener("click", () => {
@@ -1780,6 +1977,8 @@
         adminLoginFlow();
       }
     });
+    document.getElementById("userLoginBtn").addEventListener("click", userLoginFlow);
+    document.getElementById("userLogoutBtn").addEventListener("click", userLogoutFlow);
 
     // ===== 保存设置 & 修改密码 =====
     async function saveSettingsToServer() {
@@ -1871,10 +2070,7 @@
       try {
         const resp = await fetch(`${API_BASE}/settings`, {
           method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            "X-Admin-Session": adminSessionToken
-          },
+          headers: { "Content-Type": "application/json", ...authHeaders() },
           body: JSON.stringify(payload)
         });
         if (resp.status === 401) {
@@ -1882,7 +2078,7 @@
           adminUsername = "";
           adminSessionToken = null;
           localStorage.removeItem(ADMIN_SESSION_KEY);
-          updateAdminUI();
+          updateAuthUI();
           throw new Error("未登录或会话已过期，请重新登录。");
         }
         if (!resp.ok) {
@@ -1916,10 +2112,7 @@
       try {
         const resp = await fetch(`${API_BASE}/admin/change-password`, {
           method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            "X-Admin-Session": adminSessionToken
-          },
+          headers: { "Content-Type": "application/json", ...authHeaders() },
           body: JSON.stringify({ oldPassword: oldPwd, newPassword: newPwd })
         });
         const data = await resp.json().catch(() => ({}));
@@ -1931,7 +2124,7 @@
         isAdmin = false;
         adminUsername = "";
         localStorage.removeItem(ADMIN_SESSION_KEY);
-        updateAdminUI();
+        updateAuthUI();
       } catch (e) {
         alert("修改密码失败：" + e.message);
       }
@@ -1959,6 +2152,11 @@
     // ===== 报价计算 & 导出 =====
     document.getElementById("quote-form").addEventListener("submit", function (e) {
       e.preventDefault();
+
+      if (!isAuthenticated()) {
+        alert("请先登录后再计算报价。");
+        return;
+      }
 
       const materials = getMaterialsFromTable();
       const machines = getMachinesFromTable();
@@ -2166,17 +2364,16 @@
     window.addEventListener("DOMContentLoaded", async () => {
       document.querySelectorAll(".page-tab").forEach(btn => {
         btn.addEventListener("click", () => {
-          document.querySelectorAll(".page-tab").forEach(b => b.classList.remove("active"));
-          document.querySelectorAll(".section").forEach(sec => sec.classList.remove("active"));
-          btn.classList.add("active");
-          const id = btn.getAttribute("data-section");
-          const target = document.getElementById(id);
-          if (target) target.classList.add("active");
+          if (btn.dataset.requireAdmin && !isAdmin) {
+            alert("仅管理员可访问，请先登录管理员账号。");
+            return;
+          }
+          setActiveTab(btn);
         });
       });
       initProcessTypeSelector();
-      await loadSettingsFromServer();
-      await checkAdminStatus();
+      updateAuthUI();
+      await refreshAuthState();
     });
   </script>
 </body>
