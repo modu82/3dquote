@@ -21,6 +21,7 @@ app.add_middleware(
 )
 
 SETTINGS_FILE = "/data/settings.json"
+SETTINGS_BACKUP_FILE = "/data/settings.backup.json"
 ACCOUNT_FILE = "/data/admin_account.json"
 USER_ACCOUNT_FILE = "/data/user_account.json"
 ACCOUNTS_FILE = "/data/accounts.json"
@@ -379,6 +380,23 @@ def save_settings(settings: Settings):
         json.dump(settings.dict(), f, ensure_ascii=False, indent=2)
 
 
+def save_settings_backup(settings: Settings):
+    os.makedirs(os.path.dirname(SETTINGS_BACKUP_FILE), exist_ok=True)
+    with open(SETTINGS_BACKUP_FILE, "w", encoding="utf-8") as f:
+        json.dump(settings.dict(), f, ensure_ascii=False, indent=2)
+
+
+def load_settings_backup() -> Settings:
+    if not os.path.exists(SETTINGS_BACKUP_FILE):
+        raise FileNotFoundError("备份不存在")
+    try:
+        with open(SETTINGS_BACKUP_FILE, "r", encoding="utf-8") as f:
+            data = json.load(f)
+        return Settings(**data)
+    except Exception as exc:
+        raise RuntimeError(f"无法读取备份：{exc}") from exc
+
+
 # ====== 工具函数：密码 & 账户 ======
 
 def hash_password(password: str, salt: str) -> str:
@@ -582,6 +600,60 @@ def update_settings(
 
     save_settings(settings)
     return settings
+
+
+@app.get("/api/settings/export", response_model=Settings)
+def export_settings(
+    x_user_session: Optional[str] = Header(None),
+    x_admin_session: Optional[str] = Header(None),
+    x_session: Optional[str] = Header(None),
+):
+    """导出当前配置，仅管理员可用。"""
+    require_admin(x_admin_session, x_user_session, x_session)
+    return load_settings()
+
+
+@app.post("/api/settings/backup", response_model=Settings)
+def backup_settings(
+    x_user_session: Optional[str] = Header(None),
+    x_admin_session: Optional[str] = Header(None),
+    x_session: Optional[str] = Header(None),
+):
+    """将当前配置写入备份文件。"""
+    require_admin(x_admin_session, x_user_session, x_session)
+    current = load_settings()
+    save_settings_backup(current)
+    return current
+
+
+@app.post("/api/settings/restore", response_model=Settings)
+def restore_from_backup(
+    x_user_session: Optional[str] = Header(None),
+    x_admin_session: Optional[str] = Header(None),
+    x_session: Optional[str] = Header(None),
+):
+    """从备份恢复配置。"""
+    require_admin(x_admin_session, x_user_session, x_session)
+    try:
+        restored = load_settings_backup()
+    except FileNotFoundError:
+        raise HTTPException(status_code=404, detail="未找到备份，请先备份配置")
+    except RuntimeError as exc:
+        raise HTTPException(status_code=500, detail=str(exc))
+    save_settings(restored)
+    return restored
+
+
+@app.post("/api/settings/restore-factory", response_model=Settings)
+def restore_factory_settings(
+    x_user_session: Optional[str] = Header(None),
+    x_admin_session: Optional[str] = Header(None),
+    x_session: Optional[str] = Header(None),
+):
+    """恢复出厂默认配置。"""
+    require_admin(x_admin_session, x_user_session, x_session)
+    save_settings(DEFAULT_SETTINGS)
+    return DEFAULT_SETTINGS
 
 
 # ====== 统一登录 / 登出 / 状态 ======

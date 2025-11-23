@@ -198,6 +198,50 @@
     .mini-btn:hover {
       background: #d1d5db;
     }
+
+    .material-row {
+      display: grid;
+      grid-template-columns: 1.2fr 1.5fr 2fr 1.5fr 1.2fr 1fr auto;
+      column-gap: 8px;
+      align-items: center;
+      padding: 6px 0;
+      border-bottom: 1px dashed #eee;
+    }
+    .material-row select,
+    .material-row input,
+    .material-row button {
+      height: 32px;
+      line-height: 32px;
+      box-sizing: border-box;
+      font-size: 14px;
+      padding: 0 8px;
+    }
+    .material-row .unit-label {
+      line-height: 32px;
+      font-size: 14px;
+      color: #555;
+    }
+    .material-header {
+      font-size: 13px;
+      font-weight: 600;
+      color: #555;
+      padding: 8px 0 6px;
+      border-bottom: 1px solid #e5e7eb;
+    }
+    .material-price-wrap {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+    .material-price-wrap .mat-price-volume,
+    .material-price-wrap .mat-price-weight {
+      width: 100%;
+      min-width: 0;
+    }
+    .material-price-hint {
+      margin-top: 2px;
+      color: #888;
+    }
     .result {
       margin-top: 22px;
       padding-top: 18px;
@@ -617,7 +661,11 @@
     <div class="settings section admin-sub-section active" id="paramsSection">
       <h3>
         全局参数
-        <div>
+        <div style="display:flex;flex-wrap:wrap;gap:6px;align-items:center;">
+          <button type="button" class="mini-btn" id="exportSettingsBtn">导出当前配置</button>
+          <button type="button" class="mini-btn" id="backupSettingsBtn">备份当前配置</button>
+          <button type="button" class="mini-btn" id="restoreBackupBtn">恢复默认配置</button>
+          <button type="button" class="mini-btn" id="restoreFactoryBtn">恢复出厂设置</button>
           <button type="button" class="mini-btn" id="saveSettingsBtn">保存设置到服务器</button>
         </div>
       </h3>
@@ -698,19 +746,16 @@
       </div>
       <small>按计价模式填写单价：重量（元/kg）或体积（元/m³），内容会同步到上方下拉框。</small>
       <div class="table-wrapper">
-        <table>
-          <thead>
-            <tr>
-              <th style="width:16%; min-width:120px;">厂商</th>
-              <th style="width:14%; min-width:120px;">工艺</th>
-              <th style="width:26%; min-width:180px;">材料名称</th>
-              <th style="width:14%; min-width:120px;">计价模式</th>
-              <th style="width:18%; min-width:160px;">单价</th>
-              <th style="width:12%; min-width:90px;">操作</th>
-            </tr>
-          </thead>
-          <tbody id="materialsTableBody"></tbody>
-        </table>
+        <div class="material-row material-header">
+          <div>厂商</div>
+          <div>工艺</div>
+          <div>材料名称</div>
+          <div>计价模式</div>
+          <div>单价</div>
+          <div class="unit-label">单位</div>
+          <div>操作</div>
+        </div>
+        <div id="materialsTableBody"></div>
       </div>
       <div class="pager">
         <label>每页显示</label>
@@ -1099,7 +1144,7 @@
 
     // ===== 材料 / 设备：表格数据读取 =====
     function getMaterialsFromTable() {
-      const rows = document.querySelectorAll("#materialsTableBody tr");
+      const rows = document.querySelectorAll("#materialsTableBody .material-row");
       const arr = [];
       rows.forEach(row => {
         const vendorInput = row.querySelector(".mat-vendor");
@@ -1226,59 +1271,60 @@
       pricePerCubicMeter = ""
     ) {
       const tbody = document.getElementById("materialsTableBody");
-      const tr = document.createElement("tr");
-      tr.innerHTML = `
-        <td><input type="text" class="mat-vendor" value="${vendor}"></td>
-        <td>
-          <select class="mat-process"></select>
-        </td>
-        <td><input type="text" class="mat-name" value="${name}"></td>
-        <td>
-          <select class="mat-pricing">
-            <option value="WEIGHT">按重量（元/kg）</option>
-            <option value="VOLUME">按体积（元/m³）</option>
-          </select>
-        </td>
-        <td class="mat-price-cell">
-          <div class="mat-price-inputs">
+      const row = document.createElement("div");
+      row.className = "material-row";
+      row.innerHTML = `
+        <input type="text" class="mat-vendor" value="${vendor}">
+        <select class="mat-process"></select>
+        <input type="text" class="mat-name" value="${name}">
+        <select class="mat-pricing">
+          <option value="WEIGHT">按重量（元/kg）</option>
+          <option value="VOLUME">按体积（元/m³）</option>
+        </select>
+        <div>
+          <div class="material-price-wrap">
             <input type="number" class="mat-price-weight" step="0.1" min="0" value="${pricePerKg}">
             <input type="number" class="mat-price-volume" step="0.1" min="0" value="${pricePerCubicMeter}" style="display:none;" title="元/立方米">
           </div>
-          <div class="hint mat-price-hint" style="margin-top:6px;">按重量：元/kg</div>
-        </td>
-        <td><button type="button" class="mini-btn mat-delete">删</button></td>
+          <div class="hint mat-price-hint material-price-hint">按重量：元/kg</div>
+        </div>
+        <div class="unit-label mat-unit">元/kg</div>
+        <button type="button" class="mini-btn mat-delete">删</button>
       `;
-      tbody.appendChild(tr);
+      tbody.appendChild(row);
 
-      renderProcessOptions(tr.querySelector(".mat-process"), processType || UNIVERSAL_PROCESS_VALUE, { includeUniversal: true });
+      renderProcessOptions(row.querySelector(".mat-process"), processType || UNIVERSAL_PROCESS_VALUE, { includeUniversal: true });
 
-      const pricingSelect = tr.querySelector(".mat-pricing");
+      const pricingSelect = row.querySelector(".mat-pricing");
       pricingSelect.value = pricingMode === "VOLUME" ? "VOLUME" : "WEIGHT";
       function syncMaterialPriceInputs() {
         const mode = pricingSelect.value;
-        const weightInput = tr.querySelector(".mat-price-weight");
-        const volumeInput = tr.querySelector(".mat-price-volume");
-        const hint = tr.querySelector(".mat-price-hint");
+        const weightInput = row.querySelector(".mat-price-weight");
+        const volumeInput = row.querySelector(".mat-price-volume");
+        const hint = row.querySelector(".mat-price-hint");
+        const unitLabel = row.querySelector(".mat-unit");
         if (mode === "VOLUME") {
           weightInput.style.display = "none";
           volumeInput.style.display = "inline-block";
           hint.textContent = "按体积：元/m³";
+          unitLabel.textContent = "元/m³";
         } else {
           weightInput.style.display = "inline-block";
           volumeInput.style.display = "none";
           hint.textContent = "按重量：元/kg";
+          unitLabel.textContent = "元/kg";
         }
       }
       syncMaterialPriceInputs();
       pricingSelect.addEventListener("change", () => syncMaterialPriceInputs());
 
-      tr.querySelector(".mat-delete").addEventListener("click", () => {
-        tr.remove();
+      row.querySelector(".mat-delete").addEventListener("click", () => {
+        row.remove();
         rebuildMaterialsVendorFilter();
         rebuildMaterialOptions();
         applyMaterialsPagination();
       });
-      tr.querySelectorAll("input, select").forEach(input => {
+      row.querySelectorAll("input, select").forEach(input => {
         input.addEventListener("input", () => {
           rebuildMaterialsVendorFilter();
           rebuildMaterialOptions();
@@ -1426,7 +1472,7 @@
       currentMaterialsProcessFilter = processFilter;
 
       // 读取表格中的所有厂商（即便当前行还没填写材料名称，也要保留厂商）
-      const rows = document.querySelectorAll("#materialsTableBody tr");
+      const rows = document.querySelectorAll("#materialsTableBody .material-row");
       let vendors = [...new Set(Array.from(rows).map(row => {
         const vInput = row.querySelector(".mat-vendor");
         const pSelect = row.querySelector(".mat-process");
@@ -1488,7 +1534,7 @@
     }
 
     function applyMaterialsPagination() {
-      const rows = Array.from(document.querySelectorAll("#materialsTableBody tr"));
+      const rows = Array.from(document.querySelectorAll("#materialsTableBody .material-row"));
       const processFilter = document.getElementById("materialsProcessFilter")?.value || PROCESS_FILTER_ALL;
       const totalMatched = rows.filter(row => {
         const vInput = row.querySelector(".mat-vendor");
@@ -1915,8 +1961,33 @@
       if (customMarginInput && customMarginInput.value === "") {
         customMarginInput.value = (runtimeConfig.defaultProfitMargin * 100).toFixed(0);
       }
+    }
 
-          }
+    function applySettingsToRuntime(data) {
+      if (!data) return;
+      runtimeConfig.defaultProfitMargin = data.defaultProfitMargin;
+      runtimeConfig.defaultMinPricePerPart = data.defaultMinPricePerPart;
+      runtimeConfig.setupFee = data.setupFee;
+      runtimeConfig.electricityPrice = data.electricityPrice ?? CLIENT_DEFAULTS.electricityPrice;
+      runtimeConfig.materials = (data.materials || []).map(m => ({
+        ...m,
+        processType: m.processType ?? null,
+      }));
+      runtimeConfig.machines = (data.machines || []).map(m => ({
+        ...m,
+        processType: m.processType ?? null,
+      }));
+      runtimeConfig.processCosts = data.processCosts && Object.keys(data.processCosts).length
+        ? data.processCosts
+        : CLIENT_DEFAULTS.processCosts;
+      runtimeConfig.postProcessRules = Array.isArray(data.postProcessRules) && data.postProcessRules.length
+        ? data.postProcessRules.map(r => ({
+            ...r,
+            processType: r.processType ?? null,
+            costMultiplier: r.costMultiplier ?? 1,
+          }))
+        : CLIENT_DEFAULTS.postProcessRules;
+    }
 
     async function loadSettingsFromServer() {
       try {
@@ -1924,28 +1995,7 @@
         const resp = await fetch(`${API_BASE}/settings`, { headers: authHeaders() });
         if (!resp.ok) throw new Error("HTTP " + resp.status);
         const data = await resp.json();
-        runtimeConfig.defaultProfitMargin = data.defaultProfitMargin;
-        runtimeConfig.defaultMinPricePerPart = data.defaultMinPricePerPart;
-        runtimeConfig.setupFee = data.setupFee;
-        runtimeConfig.materials = (data.materials || []).map(m => ({
-          ...m,
-          processType: m.processType ?? null
-        }));
-        runtimeConfig.machines = (data.machines || []).map(m => ({
-          ...m,
-          processType: m.processType ?? null
-        }));
-        runtimeConfig.electricityPrice = data.electricityPrice ?? CLIENT_DEFAULTS.electricityPrice;
-        runtimeConfig.processCosts = data.processCosts && Object.keys(data.processCosts).length
-          ? data.processCosts
-          : CLIENT_DEFAULTS.processCosts;
-        runtimeConfig.postProcessRules = Array.isArray(data.postProcessRules) && data.postProcessRules.length
-          ? data.postProcessRules.map(r => ({
-              ...r,
-              processType: r.processType ?? null,
-              costMultiplier: r.costMultiplier ?? 1,
-            }))
-          : CLIENT_DEFAULTS.postProcessRules;
+        applySettingsToRuntime(data);
 
       } catch (e) {
         console.warn("加载服务器设置失败，使用前端默认值:", e);
@@ -2652,17 +2702,83 @@
           throw new Error(errData.detail || "保存失败");
         }
         const saved = await resp.json();
-        runtimeConfig.defaultProfitMargin = saved.defaultProfitMargin;
-        runtimeConfig.defaultMinPricePerPart = saved.defaultMinPricePerPart;
-        runtimeConfig.setupFee = saved.setupFee;
-        runtimeConfig.materials = saved.materials;
-        runtimeConfig.machines = saved.machines;
-        runtimeConfig.postProcessRules = saved.postProcessRules;
-        runtimeConfig.processCosts = saved.processCosts || runtimeConfig.processCosts;
+        applySettingsToRuntime(saved);
         rebuildPostProcessOptions();
+        initSettingsFromRuntime();
         alert("设置已保存到服务器。");
       } catch (e) {
         alert("保存设置失败：" + e.message);
+      }
+    }
+
+    async function exportCurrentSettings() {
+      if (!isAdmin || !sessionToken) {
+        alert("请先以管理员身份登录。");
+        return;
+      }
+      try {
+        const resp = await fetch(`${API_BASE}/settings/export`, { headers: authHeaders() });
+        if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+        const data = await resp.json();
+        const blob = new Blob([JSON.stringify(data, null, 2)], { type: "application/json" });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement("a");
+        a.href = url;
+        a.download = `quote_settings_${Date.now()}.json`;
+        a.click();
+        URL.revokeObjectURL(url);
+      } catch (e) {
+        alert(`导出失败：${e.message}`);
+      }
+    }
+
+    async function backupCurrentSettings() {
+      if (!isAdmin || !sessionToken) {
+        alert("请先以管理员身份登录。");
+        return;
+      }
+      try {
+        const resp = await fetch(`${API_BASE}/settings/backup`, { method: "POST", headers: authHeaders() });
+        if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+        alert("已备份当前配置。");
+      } catch (e) {
+        alert(`备份失败：${e.message}`);
+      }
+    }
+
+    async function restoreBackupSettings() {
+      if (!isAdmin || !sessionToken) {
+        alert("请先以管理员身份登录。");
+        return;
+      }
+      if (!window.confirm("确定要恢复到最近的备份配置吗？当前未保存的修改将会丢失。")) return;
+      try {
+        const resp = await fetch(`${API_BASE}/settings/restore`, { method: "POST", headers: authHeaders() });
+        if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+        const data = await resp.json();
+        applySettingsToRuntime(data);
+        initSettingsFromRuntime();
+        alert("已恢复到备份配置。");
+      } catch (e) {
+        alert(`恢复失败：${e.message}`);
+      }
+    }
+
+    async function restoreFactorySettings() {
+      if (!isAdmin || !sessionToken) {
+        alert("请先以管理员身份登录。");
+        return;
+      }
+      if (!window.confirm("确定要恢复到出厂默认配置吗？当前配置将被覆盖。")) return;
+      try {
+        const resp = await fetch(`${API_BASE}/settings/restore-factory`, { method: "POST", headers: authHeaders() });
+        if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+        const data = await resp.json();
+        applySettingsToRuntime(data);
+        initSettingsFromRuntime();
+        alert("已恢复出厂设置并应用到界面。");
+      } catch (e) {
+        alert(`恢复失败：${e.message}`);
       }
     }
 
@@ -2752,6 +2868,10 @@
     }
 
     document.getElementById("saveSettingsBtn").addEventListener("click", saveSettingsToServer);
+    document.getElementById("exportSettingsBtn").addEventListener("click", exportCurrentSettings);
+    document.getElementById("backupSettingsBtn").addEventListener("click", backupCurrentSettings);
+    document.getElementById("restoreBackupBtn").addEventListener("click", restoreBackupSettings);
+    document.getElementById("restoreFactoryBtn").addEventListener("click", restoreFactorySettings);
     document.getElementById("changePasswordBtn").addEventListener("click", changeAdminPassword);
     document.getElementById("saveSettingsBtnMaterials").addEventListener("click", saveSettingsToServer);
     document.getElementById("saveSettingsBtnMachines").addEventListener("click", saveSettingsToServer);
