@@ -60,10 +60,12 @@
 - `POST /api/auth/login` / `POST /api/auth/logout` / `GET /api/auth/status`：统一登录/登出与会话状态查询，根据用户名返回 `role`（`user` 或 `admin`）。
 - `POST /api/admin/change-password`：管理员修改自身密码，需有效管理员会话。
 - `GET /api/admin/users` / `POST /api/admin/users`：管理员获取/创建用户（含角色、启用状态）。
+- `PUT /api/admin/users/{username}` / `DELETE /api/admin/users/{username}`：管理员编辑用户名/角色或删除账号，自动校验至少保留一名启用的管理员。
 - `POST /api/admin/users/{username}/toggle`：启用或禁用指定用户。
 - `POST /api/admin/users/{username}/reset-password`：重置用户密码。
-- `POST /api/quotes`：保存一次报价记录，需登录用户或管理员。
- - `GET /api/quotes`：管理员查看报价记录，支持分页与按月份筛选。
+- `POST /api/quotes`：保存一次报价记录，自动记录创建人，可指定可见范围（仅管理员/全部登录用户/仅创建人）和“是否采用”状态。
+ - `GET /api/quotes`：登录用户可按权限查看报价记录，支持按月份、创建人、可见范围及采用状态筛选；管理员可管理全部记录。
+ - `PATCH /api/quotes/{id}` / `DELETE /api/quotes/{id}`：管理员更新记录可见范围/采用状态或删除。
  - `GET /api/quotes/summary`：管理员查看按月汇总的报价数量与金额。
 
 配置持久化文件位于 `./data/settings.json` 与 `./data/accounts.json`，可备份或通过 Docker 卷挂载到其他路径。

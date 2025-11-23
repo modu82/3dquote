@@ -127,11 +127,19 @@ class QuoteRecordCreate(BaseModel):
     weight: Optional[float] = None
     volume: Optional[float] = None
     totalHours: Optional[float] = None
+    visibility: Literal["admin_only", "all_users", "owner_only"] = "admin_only"
+    adopted: bool = False
 
 
 class QuoteRecord(QuoteRecordCreate):
     id: str
     createdAt: str
+    createdBy: str
+
+
+class QuoteRecordUpdate(BaseModel):
+    visibility: Optional[Literal["admin_only", "all_users", "owner_only"]] = None
+    adopted: Optional[bool] = None
 
 
 # ====== 默认配置 ======
@@ -398,7 +406,15 @@ def load_quote_records() -> List[QuoteRecord]:
         records = []
         for item in data:
             try:
-                records.append(QuoteRecord(**item))
+                defaults = {
+                    "visibility": item.get("visibility", "admin_only"),
+                    "adopted": item.get("adopted", False),
+                    "createdBy": item.get("createdBy") or item.get("username") or "unknown",
+                }
+                merged = {**item, **defaults}
+                if merged["visibility"] not in ("admin_only", "all_users", "owner_only"):
+                    merged["visibility"] = "admin_only"
+                records.append(QuoteRecord(**merged))
             except Exception:
                 continue
         return records
@@ -611,6 +627,11 @@ class ManageUserReset(BaseModel):
     newPassword: str
 
 
+class ManageUserUpdate(BaseModel):
+    newUsername: Optional[str] = None
+    role: Optional[Literal["admin", "user"]] = None
+
+
 @app.get("/api/admin/users", response_model=List[UserPublic])
 def list_users(
     x_admin_session: Optional[str] = Header(None),
@@ -719,6 +740,75 @@ def reset_user_password(
     return {"message": "密码已重置"}
 
 
+@app.put("/api/admin/users/{username}", response_model=UserPublic)
+def update_user(
+    username: str,
+    body: ManageUserUpdate,
+    x_admin_session: Optional[str] = Header(None),
+    x_user_session: Optional[str] = Header(None),
+    x_session: Optional[str] = Header(None),
+):
+    require_admin(x_admin_session, x_user_session, x_session)
+    account = get_account(username)
+    if not account:
+        raise HTTPException(status_code=404, detail="用户不存在")
+
+    new_username = body.newUsername.strip() if body.newUsername else account.username
+    new_role = body.role or account.role
+
+    if new_username != username and get_account(new_username):
+        raise HTTPException(status_code=400, detail="用户名已存在")
+
+    if account.role == "admin" and new_role != "admin":
+        other_active_admin = any(
+            a.username != username and a.role == "admin" and a.active for a in ACCOUNTS
+        )
+        if not other_active_admin:
+            raise HTTPException(status_code=400, detail="至少需要保留一名启用的管理员")
+
+    updated_accounts: List[Account] = []
+    for acc in ACCOUNTS:
+        if acc.username == username:
+            updated_accounts.append(
+                Account(
+                    username=new_username,
+                    salt=acc.salt,
+                    password_hash=acc.password_hash,
+                    role=new_role,
+                    active=acc.active,
+                )
+            )
+        else:
+            updated_accounts.append(acc)
+    _persist_accounts(updated_accounts)
+    if new_username != username:
+        invalidate_sessions_for(username)
+    if new_role != account.role:
+        invalidate_sessions_for(new_username)
+    return UserPublic(username=new_username, role=new_role, active=account.active)
+
+
+@app.delete("/api/admin/users/{username}")
+def delete_user(
+    username: str,
+    x_admin_session: Optional[str] = Header(None),
+    x_user_session: Optional[str] = Header(None),
+    x_session: Optional[str] = Header(None),
+):
+    require_admin(x_admin_session, x_user_session, x_session)
+    account = get_account(username)
+    if not account:
+        raise HTTPException(status_code=404, detail="用户不存在")
+    if account.role == "admin":
+        other_admin = [a for a in ACCOUNTS if a.username != username and a.role == "admin" and a.active]
+        if not other_admin:
+            raise HTTPException(status_code=400, detail="至少需要保留一名启用的管理员")
+    updated_accounts = [acc for acc in ACCOUNTS if acc.username != username]
+    _persist_accounts(updated_accounts)
+    invalidate_sessions_for(username)
+    return {"deleted": username}
+
+
 # ====== 报价记录：创建 / 查询 / 统计 ======
 
 
@@ -730,12 +820,16 @@ def create_quote_record(
     x_session: Optional[str] = Header(None),
 ):
     """保存一次报价结果，用于后续对账和统计。"""
-    require_authenticated(x_user_session, x_admin_session, x_session)
+    session = require_authenticated(x_user_session, x_admin_session, x_session)
+    visibility = body.visibility if body.visibility in ("admin_only", "all_users", "owner_only") else "admin_only"
     existing = load_quote_records()
     record = QuoteRecord(
         **body.dict(),
         id=uuid4().hex,
         createdAt=datetime.utcnow().isoformat() + "Z",
+        createdBy=session.get("username", "unknown"),
+        visibility=visibility,
+        adopted=bool(body.adopted),
     )
     existing.append(record)
     save_quote_records(existing)
@@ -747,15 +841,28 @@ def list_quote_records(
     page: int = 1,
     pageSize: int = 20,
     month: Optional[str] = None,  # 形如 2024-03
+    creator: Optional[str] = None,
+    adopted: Optional[bool] = None,
+    visibility: Optional[Literal["admin_only", "all_users", "owner_only"]] = None,
     x_admin_session: Optional[str] = Header(None),
     x_user_session: Optional[str] = Header(None),
     x_session: Optional[str] = Header(None),
 ):
-    """分页查询报价记录，支持按月份过滤，需管理员登录。"""
-    require_admin(x_admin_session, x_user_session, x_session)
+    """分页查询报价记录，支持按月份、创建人、采用状态与可见性过滤。"""
+    session = require_authenticated(x_user_session, x_admin_session, x_session)
     page = max(page, 1)
     pageSize = min(max(pageSize, 1), 200)
     all_records = load_quote_records()
+
+    if session.get("role") != "admin":
+        allowed = []
+        for r in all_records:
+            if r.visibility == "all_users":
+                allowed.append(r)
+            elif r.visibility == "owner_only" and r.createdBy == session.get("username"):
+                allowed.append(r)
+        all_records = allowed
+
     if month:
         filtered = []
         for r in all_records:
@@ -766,6 +873,15 @@ def list_quote_records(
             except Exception:
                 continue
         all_records = filtered
+
+    if creator:
+        all_records = [r for r in all_records if r.createdBy == creator]
+
+    if adopted is not None:
+        all_records = [r for r in all_records if bool(r.adopted) == bool(adopted)]
+
+    if visibility:
+        all_records = [r for r in all_records if r.visibility == visibility]
     total = len(all_records)
     start = (page - 1) * pageSize
     end = start + pageSize
@@ -807,3 +923,48 @@ def quote_summary(
         for k, v in sorted(summary.items())
     ]
     return {"items": items}
+
+
+@app.patch("/api/quotes/{quote_id}", response_model=QuoteRecord)
+def update_quote_record(
+    quote_id: str,
+    body: QuoteRecordUpdate,
+    x_admin_session: Optional[str] = Header(None),
+    x_user_session: Optional[str] = Header(None),
+    x_session: Optional[str] = Header(None),
+):
+    require_admin(x_admin_session, x_user_session, x_session)
+    records = load_quote_records()
+    updated_records: List[QuoteRecord] = []
+    target: Optional[QuoteRecord] = None
+    for r in records:
+        if r.id == quote_id:
+            visibility = r.visibility
+            if body.visibility in ("admin_only", "all_users", "owner_only"):
+                visibility = body.visibility
+            adopted = r.adopted if body.adopted is None else bool(body.adopted)
+            updated = QuoteRecord(**{**r.dict(), "visibility": visibility, "adopted": adopted})
+            updated_records.append(updated)
+            target = updated
+        else:
+            updated_records.append(r)
+    if not target:
+        raise HTTPException(status_code=404, detail="记录不存在")
+    save_quote_records(updated_records)
+    return target
+
+
+@app.delete("/api/quotes/{quote_id}")
+def delete_quote_record(
+    quote_id: str,
+    x_admin_session: Optional[str] = Header(None),
+    x_user_session: Optional[str] = Header(None),
+    x_session: Optional[str] = Header(None),
+):
+    require_admin(x_admin_session, x_user_session, x_session)
+    records = load_quote_records()
+    remaining = [r for r in records if r.id != quote_id]
+    if len(remaining) == len(records):
+        raise HTTPException(status_code=404, detail="记录不存在")
+    save_quote_records(remaining)
+    return {"deleted": quote_id}

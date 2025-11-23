@@ -389,6 +389,7 @@
 
     <div class="page-tabs main-tabs">
       <button class="page-tab active" data-main="quoteMain">报价工作台</button>
+      <button class="page-tab" data-main="recordsMain" style="display:none;">报价记录</button>
       <button class="page-tab" data-main="adminMain" data-require-admin="true">管理中心</button>
     </div>
 
@@ -480,6 +481,24 @@
           <input id="customMin" type="number" step="0.1" min="0" placeholder="留空则用默认配置" />
           <div class="hint">用于限制最小单价，防止小零件过低。</div>
         </div>
+
+        <div>
+          <label for="recordVisibilitySelect">报价记录可见范围</label>
+          <select id="recordVisibilitySelect">
+            <option value="admin_only">仅管理员</option>
+            <option value="all_users">全部登录用户</option>
+            <option value="owner_only">仅创建人</option>
+          </select>
+          <div class="hint">影响保存到记录中心的可见性，管理员可后续调整。</div>
+        </div>
+
+        <div>
+          <label for="recordAdoptedFlag">记录状态</label>
+          <div class="time-field">
+            <input id="recordAdoptedFlag" type="checkbox" />
+            <span>标记为“已采用”（仅管理员有效）</span>
+          </div>
+        </div>
       </div>
 
       <div class="actions">
@@ -499,12 +518,61 @@
     </div> <!-- /quoteSection -->
     </div> <!-- /quoteMain -->
 
+    <div class="main-section" id="recordsMain">
+      <div class="section active" id="recordsSection">
+        <h3>报价记录</h3>
+        <small>登录后可按权限查看；管理员可以筛选、修改可见范围或标记采用。</small>
+        <div class="inline-config">
+          <div>
+            <label for="recordsMonth">按月份筛选</label>
+            <input id="recordsMonth" type="month" />
+          </div>
+          <div>
+            <label for="recordsCreatorFilter">创建人</label>
+            <select id="recordsCreatorFilter"></select>
+          </div>
+          <div>
+            <label for="recordsAdoptedFilter">是否采用</label>
+            <select id="recordsAdoptedFilter">
+              <option value="all">全部</option>
+              <option value="true">已采用</option>
+              <option value="false">未采用</option>
+            </select>
+          </div>
+          <div>
+            <label for="recordsVisibilityFilter">可见范围</label>
+            <select id="recordsVisibilityFilter">
+              <option value="all">全部</option>
+              <option value="admin_only">仅管理员</option>
+              <option value="all_users">全部登录用户</option>
+              <option value="owner_only">仅创建人</option>
+            </select>
+          </div>
+          <div>
+            <label for="recordsPageSize">每页显示</label>
+            <select id="recordsPageSize">
+              <option value="5">5</option>
+              <option value="10">10</option>
+              <option value="20">20</option>
+            </select>
+          </div>
+        </div>
+        <div class="pager">
+          <button type="button" class="mini-btn" id="recordsPrev">上一页</button>
+          <span id="recordsPageInfo"></span>
+          <button type="button" class="mini-btn" id="recordsNext">下一页</button>
+        </div>
+        <div id="recordsList"></div>
+        <h4>月度汇总</h4>
+        <div id="recordsSummary"></div>
+      </div>
+    </div>
+
     <div class="main-section" id="adminMain" style="display:none;">
       <div class="page-tabs sub-tabs" id="adminTabs">
         <button class="page-tab active" data-section="paramsSection">参数配置</button>
         <button class="page-tab" data-section="materialsSection">材料设置</button>
         <button class="page-tab" data-section="machinesSection">设备设置</button>
-        <button class="page-tab" data-section="recordsSection">报价记录</button>
         <button class="page-tab" data-section="userManagementSection">用户管理</button>
       </div>
 
@@ -595,17 +663,6 @@
         <button type="button" class="mini-btn" id="addMaterialVendorBtn">添加厂商</button>
       </div>
       <small>按计价模式填写单价：重量（元/kg）或体积（元/m³），内容会同步到上方下拉框。</small>
-      <div class="pager">
-        <label>每页显示</label>
-        <select id="materialsPageSize">
-          <option value="5">5</option>
-          <option value="10">10</option>
-          <option value="20">20</option>
-        </select>
-        <button type="button" class="mini-btn" id="materialsPrev">上一页</button>
-        <span id="materialsPageInfo"></span>
-        <button type="button" class="mini-btn" id="materialsNext">下一页</button>
-      </div>
       <div class="table-wrapper">
         <table>
           <thead>
@@ -620,6 +677,17 @@
           </thead>
           <tbody id="materialsTableBody"></tbody>
         </table>
+      </div>
+      <div class="pager">
+        <label>每页显示</label>
+        <select id="materialsPageSize">
+          <option value="5">5</option>
+          <option value="10">10</option>
+          <option value="20">20</option>
+        </select>
+        <button type="button" class="mini-btn" id="materialsPrev">上一页</button>
+        <span id="materialsPageInfo"></span>
+        <button type="button" class="mini-btn" id="materialsNext">下一页</button>
       </div>
       <h3 style="display:flex;justify-content:space-between;align-items:center;">
         -
@@ -645,17 +713,6 @@
         单位：元 / 小时。可以填写设备价格和折旧年限，点击“算”自动计算小时成本：<br />
         简单公式：小时成本 ≈ 设备价格 ÷（年限 × 12 × 每月工作小时）。如需包含电费 / 人工等，可在算出的基础上手动微调。
       </small>
-      <div class="pager">
-        <label>每页显示</label>
-        <select id="machinesPageSize">
-          <option value="5">5</option>
-          <option value="10">10</option>
-          <option value="20">20</option>
-        </select>
-        <button type="button" class="mini-btn" id="machinesPrev">上一页</button>
-        <span id="machinesPageInfo"></span>
-        <button type="button" class="mini-btn" id="machinesNext">下一页</button>
-      </div>
       <div class="table-wrapper">
         <table>
           <thead>
@@ -674,37 +731,21 @@
           <tbody id="machinesTableBody"></tbody>
         </table>
       </div>
+      <div class="pager">
+        <label>每页显示</label>
+        <select id="machinesPageSize">
+          <option value="5">5</option>
+          <option value="10">10</option>
+          <option value="20">20</option>
+        </select>
+        <button type="button" class="mini-btn" id="machinesPrev">上一页</button>
+        <span id="machinesPageInfo"></span>
+        <button type="button" class="mini-btn" id="machinesNext">下一页</button>
+      </div>
       <h3 style="display:flex;justify-content:space-between;align-items:center;">
         -
         <button id="addMachineBtn" class="btn-sub">新增设备</button>
       </h3>
-    </div>
-
-    <div class="section admin-sub-section" id="recordsSection" data-require-admin="true">
-      <h3>报价记录</h3>
-      <small>需要管理员登录后查看和统计；每次计算完成会自动保存一条记录。</small>
-      <div class="inline-config">
-        <div>
-          <label for="recordsMonth">按月份筛选</label>
-          <input id="recordsMonth" type="month" />
-        </div>
-        <div>
-          <label for="recordsPageSize">每页显示</label>
-          <select id="recordsPageSize">
-            <option value="5">5</option>
-            <option value="10">10</option>
-            <option value="20">20</option>
-          </select>
-        </div>
-      </div>
-      <div class="pager">
-        <button type="button" class="mini-btn" id="recordsPrev">上一页</button>
-        <span id="recordsPageInfo"></span>
-        <button type="button" class="mini-btn" id="recordsNext">下一页</button>
-      </div>
-      <div id="recordsList"></div>
-      <h4>月度汇总</h4>
-      <div id="recordsSummary"></div>
     </div>
 
     <div class="section admin-sub-section" id="userManagementSection">
@@ -804,6 +845,7 @@
     const MATERIALS_PAGE_SIZE_KEY = "quote_materials_page_size";
     const MACHINES_PAGE_SIZE_KEY = "quote_machines_page_size";
     const RECORDS_PAGE_SIZE_KEY = "quote_records_page_size";
+    let cachedUsers = [];
     let sessionToken = localStorage.getItem(SESSION_KEY) || null;
     let sessionRole = null;
     let sessionUsername = "";
@@ -822,6 +864,10 @@
     let machinesPageSize = parseInt(localStorage.getItem(MACHINES_PAGE_SIZE_KEY) || "10", 10);
     let recordsPage = 1;
     let recordsPageSize = parseInt(localStorage.getItem(RECORDS_PAGE_SIZE_KEY) || "10", 10);
+    let recordsCreatorFilter = "";
+    let recordsAdoptedFilter = "all";
+    let recordsVisibilityFilter = "all";
+    let recordVisibilitySelection = "admin_only";
 
     function formatMoney(v) {
       return "¥" + v.toFixed(2);
@@ -1490,6 +1536,39 @@
         renderQuoteRecords();
       });
     }
+    const recordsCreatorSelect = document.getElementById("recordsCreatorFilter");
+    if (recordsCreatorSelect) {
+      recordsCreatorSelect.addEventListener("change", () => {
+        recordsCreatorFilter = recordsCreatorSelect.value;
+        recordsPage = 1;
+        renderQuoteRecords();
+      });
+    }
+    const recordsAdoptedSelect = document.getElementById("recordsAdoptedFilter");
+    if (recordsAdoptedSelect) {
+      recordsAdoptedSelect.value = recordsAdoptedFilter;
+      recordsAdoptedSelect.addEventListener("change", () => {
+        recordsAdoptedFilter = recordsAdoptedSelect.value;
+        recordsPage = 1;
+        renderQuoteRecords();
+      });
+    }
+    const recordsVisibilitySelect = document.getElementById("recordsVisibilityFilter");
+    if (recordsVisibilitySelect) {
+      recordsVisibilitySelect.value = recordsVisibilityFilter;
+      recordsVisibilitySelect.addEventListener("change", () => {
+        recordsVisibilityFilter = recordsVisibilitySelect.value;
+        recordsPage = 1;
+        renderQuoteRecords();
+      });
+    }
+    const recordVisibilitySelect = document.getElementById("recordVisibilitySelect");
+    if (recordVisibilitySelect) {
+      recordVisibilitySelect.value = recordVisibilitySelection;
+      recordVisibilitySelect.addEventListener("change", () => {
+        recordVisibilitySelection = recordVisibilitySelect.value;
+      });
+    }
     document.getElementById("recordsPrev")?.addEventListener("click", () => {
       if (recordsPage > 1) {
         recordsPage -= 1;
@@ -1717,6 +1796,10 @@
         const firstAdminTab = document.querySelector('#adminTabs .page-tab');
         setAdminSubTab(firstAdminTab);
       }
+      if (id === "recordsMain") {
+        renderQuoteRecords();
+        if (isAdmin) renderQuoteSummary();
+      }
     }
 
     function setAdminSubTab(btn) {
@@ -1736,6 +1819,10 @@
       const logoutBtn = document.getElementById("userLogoutBtn");
       const adminTab = document.querySelector('.main-tabs .page-tab[data-main="adminMain"]');
       const adminMain = document.getElementById("adminMain");
+      const recordsTab = document.querySelector('.main-tabs .page-tab[data-main="recordsMain"]');
+      const recordsMain = document.getElementById("recordsMain");
+      const recordAdopted = document.getElementById("recordAdoptedFlag");
+      const recordVisibilitySelect = document.getElementById("recordVisibilitySelect");
 
       const authed = isAuthenticated();
       if (loginPanel) loginPanel.style.display = authed ? "none" : "";
@@ -1749,11 +1836,29 @@
       }
 
       if (adminTab) adminTab.style.display = isAdmin ? "" : "none";
-      if (!isAdmin) {
+      if (recordsTab) recordsTab.style.display = authed ? "" : "none";
+      if (!isAdmin && adminTab?.classList.contains("active")) {
+        setMainTab(document.querySelector('.main-tabs .page-tab[data-main="quoteMain"]'));
+      }
+      if (!authed && recordsTab?.classList.contains("active")) {
         setMainTab(document.querySelector('.main-tabs .page-tab[data-main="quoteMain"]'));
       }
       if (adminMain) {
         adminMain.style.display = isAdmin ? "" : "none";
+      }
+      if (recordsMain) {
+        recordsMain.style.display = authed ? "" : "none";
+      }
+
+      if (recordAdopted) {
+        recordAdopted.checked = false;
+        recordAdopted.disabled = !isAdmin;
+      }
+      if (recordVisibilitySelect) {
+        recordVisibilitySelect.value = recordVisibilitySelection;
+      }
+      if (authed) {
+        populateRecordCreatorsOptions(isAdmin ? cachedUsers : []);
       }
       const activeAdminTab = document.querySelector('#adminTabs .page-tab.active');
       if (isAdmin && activeAdminTab) {
@@ -1805,8 +1910,10 @@
       if (isAuthenticated() && (forceReload || !settingsLoaded)) {
         await loadSettingsFromServer();
       }
-      if (isAdmin) {
+      if (isAuthenticated()) {
         renderQuoteRecords();
+      }
+      if (isAdmin) {
         renderQuoteSummary();
         renderUserTable();
       }
@@ -1816,10 +1923,13 @@
       const month = document.getElementById("recordsMonth")?.value || "";
       const params = new URLSearchParams({ page: String(recordsPage), pageSize: String(recordsPageSize) });
       if (month) params.append("month", month);
+      if (recordsCreatorFilter) params.append("creator", recordsCreatorFilter);
+      if (recordsAdoptedFilter !== "all") params.append("adopted", recordsAdoptedFilter === "true");
+      if (recordsVisibilityFilter !== "all") params.append("visibility", recordsVisibilityFilter);
       const resp = await fetch(`${API_BASE}/quotes?${params.toString()}`, {
         headers: authHeaders()
       });
-      if (!resp.ok) throw new Error("无法获取报价记录，请确认已登录管理员");
+      if (!resp.ok) throw new Error("无法获取报价记录，请确认已登录并具备查看权限");
       return resp.json();
     }
 
@@ -1832,6 +1942,27 @@
       return resp.json();
     }
 
+    async function updateQuoteRecord(id, payload) {
+      const resp = await fetch(`${API_BASE}/quotes/${id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json", ...authHeaders() },
+        body: JSON.stringify(payload)
+      });
+      const data = await resp.json().catch(() => ({}));
+      if (!resp.ok) throw new Error(data.detail || "更新失败");
+      return data;
+    }
+
+    async function deleteQuoteRecord(id) {
+      const resp = await fetch(`${API_BASE}/quotes/${id}`, {
+        method: "DELETE",
+        headers: authHeaders()
+      });
+      const data = await resp.json().catch(() => ({}));
+      if (!resp.ok) throw new Error(data.detail || "删除失败");
+      return data;
+    }
+
     async function renderQuoteRecords() {
       const listEl = document.getElementById("recordsList");
       const infoEl = document.getElementById("recordsPageInfo");
@@ -1841,14 +1972,70 @@
         const data = await fetchQuoteRecords();
         listEl.innerHTML = "";
         if (Array.isArray(data.items) && data.items.length) {
+          const visibilityLabels = {
+            admin_only: "仅管理员",
+            all_users: "全部登录用户",
+            owner_only: "仅创建人",
+          };
           data.items.forEach(item => {
             const div = document.createElement("div");
             div.className = "record-card";
+            const createdLabel = item.createdBy ? `创建人：${item.createdBy}` : "创建人：-";
+            const visibilityLabel = visibilityLabels[item.visibility] || "未指定";
+            const adoptedLabel = item.adopted ? "已采用" : "未采用";
             div.innerHTML = `
               <div><strong>${item.processLabel || item.processType}</strong> · ${new Date(item.createdAt).toLocaleString()}</div>
+              <div>${createdLabel} · 可见：${visibilityLabel} · 状态：${adoptedLabel}</div>
               <div>材料：${item.material?.vendor || ''} / ${item.material?.name || ''}</div>
               <div>单价：${formatMoney(item.finalPricePerPart)} × 数量 ${item.quantity} = ${formatMoney(item.totalPrice)}</div>
             `;
+
+            if (isAdmin) {
+              const actions = document.createElement("div");
+              actions.className = "pager";
+
+              const adoptBtn = document.createElement("button");
+              adoptBtn.type = "button";
+              adoptBtn.className = "mini-btn";
+              adoptBtn.textContent = item.adopted ? "标记未采用" : "标记已采用";
+              adoptBtn.addEventListener("click", async () => {
+                await updateQuoteRecord(item.id, { adopted: !item.adopted });
+                renderQuoteRecords();
+              });
+
+              const visibilitySelect = document.createElement("select");
+              [
+                { value: "admin_only", label: "仅管理员" },
+                { value: "all_users", label: "全部登录用户" },
+                { value: "owner_only", label: "仅创建人" },
+              ].forEach(opt => {
+                const option = document.createElement("option");
+                option.value = opt.value;
+                option.textContent = opt.label;
+                visibilitySelect.appendChild(option);
+              });
+              visibilitySelect.value = item.visibility || "admin_only";
+              visibilitySelect.addEventListener("change", async () => {
+                await updateQuoteRecord(item.id, { visibility: visibilitySelect.value });
+                renderQuoteRecords();
+              });
+
+              const delBtn = document.createElement("button");
+              delBtn.type = "button";
+              delBtn.className = "mini-btn";
+              delBtn.textContent = "删除";
+              delBtn.addEventListener("click", async () => {
+                if (window.confirm("确定删除该记录吗？")) {
+                  await deleteQuoteRecord(item.id);
+                  renderQuoteRecords();
+                  renderQuoteSummary();
+                }
+              });
+
+              actions.append("状态：", adoptBtn, " 可见范围：", visibilitySelect, delBtn);
+              div.appendChild(actions);
+            }
+
             listEl.appendChild(div);
           });
         } else {
@@ -1864,6 +2051,10 @@
     async function renderQuoteSummary() {
       const summaryEl = document.getElementById("recordsSummary");
       if (!summaryEl) return;
+      if (!isAdmin) {
+        summaryEl.textContent = "仅管理员可查看月度汇总";
+        return;
+      }
       summaryEl.textContent = "加载中...";
       try {
         const data = await fetchQuoteSummary();
@@ -1884,6 +2075,33 @@
       return resp.json();
     }
 
+    function populateRecordCreatorsOptions(users = []) {
+      const select = document.getElementById("recordsCreatorFilter");
+      if (!select) return;
+      const prev = select.value;
+      select.innerHTML = "";
+      const allOpt = document.createElement("option");
+      allOpt.value = "";
+      allOpt.textContent = "全部";
+      select.appendChild(allOpt);
+      if (sessionUsername) {
+        const selfOpt = document.createElement("option");
+        selfOpt.value = sessionUsername;
+        selfOpt.textContent = `仅自己 (${sessionUsername})`;
+        select.appendChild(selfOpt);
+      }
+      if (Array.isArray(users) && users.length) {
+        users.forEach(u => {
+          const opt = document.createElement("option");
+          opt.value = u.username;
+          opt.textContent = `${u.username}（${u.role === "admin" ? "管理员" : "用户"}）`;
+          select.appendChild(opt);
+        });
+      }
+      const allowed = Array.from(select.options).map(o => o.value);
+      select.value = allowed.includes(prev) ? prev : "";
+    }
+
     async function renderUserTable() {
       if (!isAdmin) return;
       const tbody = document.getElementById("userTableBody");
@@ -1891,6 +2109,8 @@
       tbody.innerHTML = "<tr><td colspan='4'>加载中...</td></tr>";
       try {
         const users = await fetchUsers();
+        cachedUsers = users;
+        populateRecordCreatorsOptions(users);
         if (!Array.isArray(users) || users.length === 0) {
           tbody.innerHTML = "<tr><td colspan='4'>暂无用户</td></tr>";
           return;
@@ -1904,9 +2124,11 @@
             <td>${user.active ? "启用" : "禁用"}</td>
             <td>
               <button type="button" class="mini-btn" data-action="reset" data-username="${user.username}">重置密码</button>
+              <button type="button" class="mini-btn" data-action="edit" data-username="${user.username}" data-role="${user.role}">编辑</button>
               <button type="button" class="mini-btn" data-action="toggle" data-username="${user.username}" data-active="${user.active}">
                 ${user.active ? "禁用" : "启用"}
               </button>
+              <button type="button" class="mini-btn" data-action="delete" data-username="${user.username}">删除</button>
             </td>
           `;
           tbody.appendChild(tr);
@@ -1974,8 +2196,45 @@
       }
     }
 
+    async function updateUser(username, newUsername, newRole) {
+      if (!newUsername) newUsername = username;
+      if (newRole !== "admin" && newRole !== "user") {
+        alert("角色只能为 admin 或 user");
+        return;
+      }
+      try {
+        const resp = await fetch(`${API_BASE}/admin/users/${encodeURIComponent(username)}`, {
+          method: "PUT",
+          headers: { "Content-Type": "application/json", ...authHeaders() },
+          body: JSON.stringify({ newUsername, role: newRole })
+        });
+        const data = await resp.json().catch(() => ({}));
+        if (!resp.ok) throw new Error(data.detail || "更新失败");
+        await renderUserTable();
+        alert("用户信息已更新");
+      } catch (e) {
+        alert(e.message || "更新失败");
+      }
+    }
+
+    async function deleteUser(username) {
+      try {
+        const resp = await fetch(`${API_BASE}/admin/users/${encodeURIComponent(username)}`, {
+          method: "DELETE",
+          headers: authHeaders()
+        });
+        const data = await resp.json().catch(() => ({}));
+        if (!resp.ok) throw new Error(data.detail || "删除失败");
+        await renderUserTable();
+      } catch (e) {
+        alert(e.message || "删除失败");
+      }
+    }
+
     async function persistQuoteResult(quote) {
       try {
+        const recordVisibility = document.getElementById("recordVisibilitySelect")?.value || "admin_only";
+        const recordAdopted = isAdmin && document.getElementById("recordAdoptedFlag")?.checked ? true : false;
         await fetch(`${API_BASE}/quotes`, {
           method: "POST",
           headers: { "Content-Type": "application/json", ...authHeaders() },
@@ -1997,6 +2256,8 @@
             weight: quote.weight,
             volume: quote.volume,
             totalHours: quote.totalHours,
+            visibility: recordVisibility,
+            adopted: recordAdopted
           })
         });
         if (isAdmin) {
@@ -2248,6 +2509,15 @@
       } else if (action === "toggle") {
         const active = btn.getAttribute("data-active") === "true";
         toggleUser(username, !active);
+      } else if (action === "edit") {
+        const currentRole = btn.getAttribute("data-role") || "user";
+        const newName = window.prompt("请输入新的用户名（留空则不修改）：", username) || username;
+        const newRole = window.prompt("请输入角色 admin/user：", currentRole) || currentRole;
+        updateUser(username, newName.trim(), newRole.trim());
+      } else if (action === "delete") {
+        if (window.confirm(`确定要删除用户 ${username} 吗？`)) {
+          deleteUser(username);
+        }
       }
     });
 
@@ -2468,6 +2738,10 @@
         btn.addEventListener("click", () => {
           if (btn.dataset.main === "adminMain" && !isAdmin) {
             alert("仅管理员可访问，请先使用管理员账户登录。");
+            return;
+          }
+          if (btn.dataset.main === "recordsMain" && !isAuthenticated()) {
+            alert("请先登录后查看报价记录。");
             return;
           }
           setMainTab(btn);
