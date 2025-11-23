@@ -244,19 +244,45 @@
       font-weight: 500;
       color: #555;
     }
-    .material-price-wrap {
+    .material-price-cell {
       display: flex;
       align-items: center;
-      gap: 6px;
+      gap: 8px;
+    }
+    .material-price-wrap {
+      display: flex;
+      flex-direction: column;
+      gap: 2px;
     }
     .material-price-wrap .mat-price-volume,
     .material-price-wrap .mat-price-weight {
       width: 100%;
       min-width: 0;
+      height: 36px;
+      line-height: 36px;
+      font-size: 14px;
+      box-sizing: border-box;
+      padding: 0 8px;
+    }
+    .material-price-wrap .mat-price-volume[style*="display:none"] {
+      height: 0;
+      padding: 0;
+      margin: 0;
+      border: 0;
     }
     .material-price-hint {
-      margin-top: 2px;
+      margin-top: 0;
       color: #888;
+    }
+    .material-price-cell .unit-text.mat-unit {
+      font-size: 14px;
+      line-height: 36px;
+    }
+    .material-price-cell .mini-btn.mat-delete {
+      height: 36px;
+      line-height: 36px;
+      font-size: 14px;
+      padding: 0 12px;
     }
     .result {
       margin-top: 22px;
@@ -1218,6 +1244,12 @@
         // 没填名字就跳过这一行
         if (!name) return;
 
+        const hasDepreciationInputs = !(
+          isNaN(price) || price <= 0 ||
+          isNaN(life) || life <= 0 ||
+          isNaN(monthH) || monthH <= 0
+        );
+
         arr.push({
           vendor,
           name,
@@ -1228,7 +1260,8 @@
           expectedLifeYears: isNaN(life) || life <= 0 ? null : life,
           expectedMonthlyHours: isNaN(monthH) || monthH <= 0 ? null : monthH,
           powerW: isNaN(power) || power <= 0 ? null : power,
-          processType: normalizedProcess
+          processType: normalizedProcess,
+          hourlyRateIncludesOperational: hasDepreciationInputs ? false : null
         });
       });
       return arr;
@@ -1313,15 +1346,15 @@
           <option value="WEIGHT">按重量（元/kg）</option>
           <option value="VOLUME">按体积（元/m³）</option>
         </select>
-        <div>
+        <div class="material-price-cell">
           <div class="material-price-wrap">
             <input type="number" class="mat-price-weight" step="0.1" min="0" value="${pricePerKg}">
             <input type="number" class="mat-price-volume" step="0.1" min="0" value="${pricePerCubicMeter}" style="display:none;" title="元/立方米">
+            <div class="hint mat-price-hint material-price-hint sub-label">按重量：元/kg</div>
           </div>
-          <div class="hint mat-price-hint material-price-hint sub-label">按重量：元/kg</div>
+          <div class="unit-text mat-unit">元/kg</div>
+          <button type="button" class="mini-btn mat-delete">删</button>
         </div>
-        <div class="unit-text mat-unit">元/kg</div>
-        <button type="button" class="mini-btn mat-delete">删</button>
       `;
       tbody.appendChild(row);
 
@@ -3038,7 +3071,16 @@
       const depreciationHourly = computeMachineDepreciationHourly(machine);
       const machineHourly = baseMachineHourly > 0 ? baseMachineHourly : depreciationHourly;
       const operationalHourly = operatorHourly + overheadHourly + electricityHourly;
-      const effectiveMachineHourly = machineHourly + (baseMachineHourly > 0 ? 0 : operationalHourly);
+      const hasDepreciationInputs =
+        !!(parseFloat(machine.price) > 0 && parseFloat(machine.expectedLifeYears) > 0 && parseFloat(machine.expectedMonthlyHours) > 0);
+      const hourlyRateIncludesOperational = machine.hourlyRateIncludesOperational;
+      const effectiveMachineHourly = machineHourly + (
+        hourlyRateIncludesOperational === true
+          ? 0
+          : hourlyRateIncludesOperational === false
+            ? operationalHourly
+            : (hasDepreciationInputs ? operationalHourly : 0)
+      );
       const machineCostPerPart = totalHours * effectiveMachineHourly;
       const totalPostMinutes = (post.baseMinutes || 0) + (post.minutesPerGram || 0) * weight;
       const postLaborCost = (processCosts.laborHourlyCost || 0) * totalPostMinutes / 60;
