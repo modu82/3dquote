@@ -21,6 +21,7 @@ app.add_middleware(
 )
 
 SETTINGS_FILE = "/data/settings.json"
+SETTINGS_BACKUP_FILE = "/data/settings.backup.json"
 ACCOUNT_FILE = "/data/admin_account.json"
 USER_ACCOUNT_FILE = "/data/user_account.json"
 ACCOUNTS_FILE = "/data/accounts.json"
@@ -58,6 +59,7 @@ class Machine(BaseModel):
     expectedMonthlyHours: float | None = None  # 每月预计工作小时数（小时，可选）
     powerW: float | None = None              # 运行时平均功率（W，可选）
     processType: Optional[str] = None        # 加工类型，None 视为通用
+    hourlyRateIncludesOperational: Optional[bool] = None  # 小时费率是否已含人工/电费/杂项
 
 class PostProcessRule(BaseModel):
     key: str                      # 唯一标识，比如 "NONE" / "BASIC"
@@ -78,9 +80,12 @@ class Settings(BaseModel):
 
     # 新增：全局成本参数
     electricityPrice: float = 1.0           # 电价 元/kWh
-    laborHourlyCost: float = 25.0           # 操作人工成本 元/人·小时
-    machinesPerOperator: float = 3.0        # 每名操作员平均负责几台机
-    overheadHourlyPerMachine: float = 2.0   # 其他杂项成本 元/台·小时
+    laborHourlyCost: float = 25.0           # 操作人工成本 元/人·小时（兼容旧版全局）
+    machinesPerOperator: float = 3.0        # 每名操作员平均负责几台机（兼容旧版全局）
+    overheadHourlyPerMachine: float = 2.0   # 其他杂项成本 元/台·小时（兼容旧版全局）
+
+    # 按工艺的成本参数
+    processCosts: Dict[str, Dict[str, float]] | None = None
 
     # 新增：后处理规则列表
     postProcessRules: List[PostProcessRule] = []
@@ -111,6 +116,11 @@ class LoginResponse(BaseModel):
 class ChangePasswordRequest(BaseModel):
     oldPassword: str
     newPassword: str
+
+
+class ChangeUsernameRequest(BaseModel):
+    password: str
+    newUsername: str
 
 
 class QuoteRecordCreate(BaseModel):
@@ -172,10 +182,10 @@ DEFAULT_SETTINGS = Settings(
         Material(vendor="通用板材", name="亚克力板", pricePerKg=45, processType="CO2_LASER_ENGRAVE_CUT"),
     ],
     machines=[
-        Machine(vendor="Bambu Lab", name="A1/桌面机", hourlyRate=10, processType="FDM_3D_PRINT"),
-        Machine(vendor="Elegoo", name="Saturn 树脂机", hourlyRate=28, processType="RESIN_3D_PRINT"),
-        Machine(vendor="通用木工", name="三轴雕刻机", hourlyRate=80, processType="CNC_MILLING"),
-        Machine(vendor="通用激光", name="CO₂ 激光雕刻机", hourlyRate=120, processType="CO2_LASER_ENGRAVE_CUT"),
+        Machine(vendor="Bambu Lab", name="A1/桌面机", hourlyRate=10, processType="FDM_3D_PRINT", hourlyRateIncludesOperational=True),
+        Machine(vendor="Elegoo", name="Saturn 树脂机", hourlyRate=28, processType="RESIN_3D_PRINT", hourlyRateIncludesOperational=True),
+        Machine(vendor="通用木工", name="三轴雕刻机", hourlyRate=80, processType="CNC_MILLING", hourlyRateIncludesOperational=True),
+        Machine(vendor="通用激光", name="CO₂ 激光雕刻机", hourlyRate=120, processType="CO2_LASER_ENGRAVE_CUT", hourlyRateIncludesOperational=True),
     ],
     defaultProfitMargin=0.4,
     defaultMinPricePerPart=15.0,
@@ -186,6 +196,29 @@ DEFAULT_SETTINGS = Settings(
     laborHourlyCost=25.0,
     machinesPerOperator=3.0,
     overheadHourlyPerMachine=2.0,
+
+    processCosts={
+        "FDM_3D_PRINT": {
+            "laborHourlyCost": 25.0,
+            "machinesPerOperator": 3.0,
+            "overheadHourlyPerMachine": 2.0,
+        },
+        "RESIN_3D_PRINT": {
+            "laborHourlyCost": 30.0,
+            "machinesPerOperator": 2.0,
+            "overheadHourlyPerMachine": 3.0,
+        },
+        "CNC_MILLING": {
+            "laborHourlyCost": 35.0,
+            "machinesPerOperator": 1.0,
+            "overheadHourlyPerMachine": 5.0,
+        },
+        "CO2_LASER_ENGRAVE_CUT": {
+            "laborHourlyCost": 28.0,
+            "machinesPerOperator": 2.0,
+            "overheadHourlyPerMachine": 3.0,
+        },
+    },
 
     postProcessRules=[
         PostProcessRule(
@@ -247,6 +280,20 @@ def _migrate_old_machine(m: dict) -> Machine:
         m["vendor"] = "未分类"
     if "processType" not in m:
         m["processType"] = None
+    has_depreciation = (
+        isinstance(m.get("price"), (int, float))
+        and m.get("price") is not None
+        and m.get("price") > 0
+        and isinstance(m.get("expectedLifeYears"), (int, float))
+        and m.get("expectedLifeYears") is not None
+        and m.get("expectedLifeYears") > 0
+        and isinstance(m.get("expectedMonthlyHours"), (int, float))
+        and m.get("expectedMonthlyHours") is not None
+        and m.get("expectedMonthlyHours") > 0
+    )
+    if "hourlyRateIncludesOperational" not in m:
+        # 旧数据的小时成本默认包含人工/电费/杂项；若填写了折旧参数则视为不包含
+        m["hourlyRateIncludesOperational"] = False if has_depreciation else True
     return Machine(**m)
 
 
@@ -264,6 +311,41 @@ def load_settings() -> Settings:
 
         materials = [_migrate_old_material(m) for m in mats]
         machines = [_migrate_old_machine(m) for m in macs]
+
+        loaded_process_costs = data.get("processCosts")
+
+        # 兼容旧版：如果没有 processCosts，就用全局值填充所有工艺
+        default_process_costs = DEFAULT_SETTINGS.processCosts or {}
+        merged_process_costs = {}
+        if isinstance(loaded_process_costs, dict):
+            merged_process_costs = {
+                k: {
+                    "laborHourlyCost": v.get(
+                        "laborHourlyCost", data.get("laborHourlyCost", DEFAULT_SETTINGS.laborHourlyCost)
+                    ),
+                    "machinesPerOperator": v.get(
+                        "machinesPerOperator",
+                        data.get("machinesPerOperator", DEFAULT_SETTINGS.machinesPerOperator),
+                    ),
+                    "overheadHourlyPerMachine": v.get(
+                        "overheadHourlyPerMachine",
+                        data.get("overheadHourlyPerMachine", DEFAULT_SETTINGS.overheadHourlyPerMachine),
+                    ),
+                }
+                for k, v in loaded_process_costs.items()
+                if isinstance(v, dict)
+            }
+        else:
+            merged_process_costs = {
+                k: {
+                    "laborHourlyCost": data.get("laborHourlyCost", DEFAULT_SETTINGS.laborHourlyCost),
+                    "machinesPerOperator": data.get("machinesPerOperator", DEFAULT_SETTINGS.machinesPerOperator),
+                    "overheadHourlyPerMachine": data.get(
+                        "overheadHourlyPerMachine", DEFAULT_SETTINGS.overheadHourlyPerMachine
+                    ),
+                }
+                for k in default_process_costs.keys()
+            }
 
         return Settings(
             materials=materials,
@@ -298,6 +380,8 @@ def load_settings() -> Settings:
                 if isinstance(post_rules, list)
                 else DEFAULT_SETTINGS.postProcessRules
             ),
+
+            processCosts=merged_process_costs or DEFAULT_SETTINGS.processCosts,
         )
 
     except Exception as e:
@@ -309,6 +393,23 @@ def save_settings(settings: Settings):
     os.makedirs(os.path.dirname(SETTINGS_FILE), exist_ok=True)
     with open(SETTINGS_FILE, "w", encoding="utf-8") as f:
         json.dump(settings.dict(), f, ensure_ascii=False, indent=2)
+
+
+def save_settings_backup(settings: Settings):
+    os.makedirs(os.path.dirname(SETTINGS_BACKUP_FILE), exist_ok=True)
+    with open(SETTINGS_BACKUP_FILE, "w", encoding="utf-8") as f:
+        json.dump(settings.dict(), f, ensure_ascii=False, indent=2)
+
+
+def load_settings_backup() -> Settings:
+    if not os.path.exists(SETTINGS_BACKUP_FILE):
+        raise FileNotFoundError("备份不存在")
+    try:
+        with open(SETTINGS_BACKUP_FILE, "r", encoding="utf-8") as f:
+            data = json.load(f)
+        return Settings(**data)
+    except Exception as exc:
+        raise RuntimeError(f"无法读取备份：{exc}") from exc
 
 
 # ====== 工具函数：密码 & 账户 ======
@@ -516,6 +617,60 @@ def update_settings(
     return settings
 
 
+@app.get("/api/settings/export", response_model=Settings)
+def export_settings(
+    x_user_session: Optional[str] = Header(None),
+    x_admin_session: Optional[str] = Header(None),
+    x_session: Optional[str] = Header(None),
+):
+    """导出当前配置，仅管理员可用。"""
+    require_admin(x_admin_session, x_user_session, x_session)
+    return load_settings()
+
+
+@app.post("/api/settings/backup", response_model=Settings)
+def backup_settings(
+    x_user_session: Optional[str] = Header(None),
+    x_admin_session: Optional[str] = Header(None),
+    x_session: Optional[str] = Header(None),
+):
+    """将当前配置写入备份文件。"""
+    require_admin(x_admin_session, x_user_session, x_session)
+    current = load_settings()
+    save_settings_backup(current)
+    return current
+
+
+@app.post("/api/settings/restore", response_model=Settings)
+def restore_from_backup(
+    x_user_session: Optional[str] = Header(None),
+    x_admin_session: Optional[str] = Header(None),
+    x_session: Optional[str] = Header(None),
+):
+    """从备份恢复配置。"""
+    require_admin(x_admin_session, x_user_session, x_session)
+    try:
+        restored = load_settings_backup()
+    except FileNotFoundError:
+        raise HTTPException(status_code=404, detail="未找到备份，请先备份配置")
+    except RuntimeError as exc:
+        raise HTTPException(status_code=500, detail=str(exc))
+    save_settings(restored)
+    return restored
+
+
+@app.post("/api/settings/restore-factory", response_model=Settings)
+def restore_factory_settings(
+    x_user_session: Optional[str] = Header(None),
+    x_admin_session: Optional[str] = Header(None),
+    x_session: Optional[str] = Header(None),
+):
+    """恢复出厂默认配置。"""
+    require_admin(x_admin_session, x_user_session, x_session)
+    save_settings(DEFAULT_SETTINGS)
+    return DEFAULT_SETTINGS
+
+
 # ====== 统一登录 / 登出 / 状态 ======
 
 
@@ -613,6 +768,8 @@ def admin_change_password(
                     password_hash=new_hash,
                     role=acc.role,
                     active=acc.active,
+                    recordEnabled=acc.recordEnabled,
+                    canViewRecords=acc.canViewRecords,
                 )
             )
         else:
@@ -621,6 +778,90 @@ def admin_change_password(
     _persist_accounts(updated_accounts)
     invalidate_sessions_for(account.username)
     return {"message": "密码已更新，请使用新密码重新登录"}
+
+
+@app.post("/api/account/change-password")
+def account_change_password(
+    body: ChangePasswordRequest,
+    x_session: Optional[str] = Header(None),
+    x_admin_session: Optional[str] = Header(None),
+    x_user_session: Optional[str] = Header(None),
+):
+    """普通用户或管理员修改自己的密码。"""
+    session = require_authenticated(x_user_session, x_admin_session, x_session)
+    account = get_account(session["username"])
+    if not account:
+        raise HTTPException(status_code=400, detail="账号不存在")
+
+    if not verify_password(body.oldPassword, account.salt, account.password_hash):
+        raise HTTPException(status_code=403, detail="旧密码不正确")
+
+    new_salt = secrets.token_hex(16)
+    new_hash = hash_password(body.newPassword, new_salt)
+    updated_accounts: List[Account] = []
+    for acc in ACCOUNTS:
+        if acc.username == account.username:
+            updated_accounts.append(
+                Account(
+                    username=acc.username,
+                    salt=new_salt,
+                    password_hash=new_hash,
+                    role=acc.role,
+                    active=acc.active,
+                    recordEnabled=acc.recordEnabled,
+                    canViewRecords=acc.canViewRecords,
+                )
+            )
+        else:
+            updated_accounts.append(acc)
+    _persist_accounts(updated_accounts)
+    invalidate_sessions_for(account.username)
+    return {"message": "密码已更新，请使用新密码重新登录"}
+
+
+@app.post("/api/account/change-username")
+def account_change_username(
+    body: ChangeUsernameRequest,
+    x_session: Optional[str] = Header(None),
+    x_admin_session: Optional[str] = Header(None),
+    x_user_session: Optional[str] = Header(None),
+):
+    """普通用户或管理员修改自己的用户名。"""
+    session = require_authenticated(x_user_session, x_admin_session, x_session)
+    account = get_account(session["username"])
+    if not account:
+        raise HTTPException(status_code=400, detail="账号不存在")
+
+    new_username = body.newUsername.strip()
+    if not new_username:
+        raise HTTPException(status_code=400, detail="新用户名不能为空")
+
+    if get_account(new_username):
+        raise HTTPException(status_code=400, detail="目标用户名已存在")
+
+    if not verify_password(body.password, account.salt, account.password_hash):
+        raise HTTPException(status_code=403, detail="密码验证失败")
+
+    updated_accounts: List[Account] = []
+    for acc in ACCOUNTS:
+        if acc.username == account.username:
+            updated_accounts.append(
+                Account(
+                    username=new_username,
+                    salt=acc.salt,
+                    password_hash=acc.password_hash,
+                    role=acc.role,
+                    active=acc.active,
+                    recordEnabled=acc.recordEnabled,
+                    canViewRecords=acc.canViewRecords,
+                )
+            )
+        else:
+            updated_accounts.append(acc)
+
+    _persist_accounts(updated_accounts)
+    invalidate_sessions_for(account.username)
+    return {"message": "用户名已更新，请使用新用户名重新登录"}
 
 
 class UserPublic(BaseModel):
