@@ -1098,6 +1098,7 @@ def update_user(
             updated_accounts.append(acc)
     _persist_accounts(updated_accounts)
     if new_username != username:
+        reassign_quote_owners(username, new_username)
         invalidate_sessions_for(username)
     if new_role != account.role:
         invalidate_sessions_for(new_username)
