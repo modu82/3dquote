@@ -199,74 +199,16 @@
       background: #d1d5db;
     }
 
-    .materials-table-container {
-      border: 1px solid #e5e7eb;
-      border-radius: 12px;
-      background: #fff;
-      padding: 12px;
-    }
-    .materials-table {
-      width: 100%;
-      border-collapse: collapse;
-      table-layout: auto;
-    }
-    .materials-table th,
-    .materials-table td {
-      padding: 10px 10px;
-      border-bottom: 1px solid #eef2f7;
-      vertical-align: middle;
-      font-size: 14px;
-      height: 48px;
-    }
-    .materials-table th {
-      background: #f9fafb;
-      font-weight: 600;
-      color: #4b5563;
-    }
-    .materials-table .material-row td {
-      background: #fff;
-    }
-    .materials-table input,
-    .materials-table select,
-    .materials-table .mini-btn,
-    .materials-table .unit-text {
-      height: 36px;
-      line-height: 36px;
-      box-sizing: border-box;
-      font-size: 14px;
-    }
-    .materials-table input,
-    .materials-table select {
-      width: 100%;
-      padding: 0 10px;
-    }
-    .materials-table .unit-text,
-    .materials-table .mat-delete {
-      display: inline-flex;
-      align-items: center;
-      justify-content: center;
-      width: 100%;
-    }
-    .materials-table .mini-btn {
-      border-radius: 8px;
-      padding: 0 12px;
-      font-weight: 500;
-    }
     .material-price-wrap {
       display: flex;
       flex-direction: column;
-      gap: 2px;
+      gap: 4px;
       min-width: 0;
     }
     .material-price-wrap .mat-price-volume,
     .material-price-wrap .mat-price-weight {
       width: 100%;
       min-width: 0;
-      height: 36px;
-      line-height: 36px;
-      font-size: 14px;
-      box-sizing: border-box;
-      padding: 0 10px;
     }
     .material-price-wrap .mat-price-volume[style*="display:none"] {
       height: 0;
@@ -778,8 +720,8 @@
         <button type="button" class="mini-btn" id="addMaterialVendorBtn">添加厂商</button>
       </div>
       <small>按计价模式填写单价：重量（元/kg）或体积（元/m³），内容会同步到上方下拉框。</small>
-      <div class="table-wrapper materials-table-container">
-        <table class="materials-table">
+      <div class="table-wrapper">
+        <table>
           <thead>
             <tr class="material-header">
               <th style="width:14%; min-width:140px;">厂商</th>
