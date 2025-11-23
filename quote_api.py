@@ -817,7 +817,11 @@ def account_change_username(
     if not account:
         raise HTTPException(status_code=400, detail="账号不存在")
 
-    if get_account(body.newUsername):
+    new_username = body.newUsername.strip()
+    if not new_username:
+        raise HTTPException(status_code=400, detail="新用户名不能为空")
+
+    if get_account(new_username):
         raise HTTPException(status_code=400, detail="目标用户名已存在")
 
     if not verify_password(body.password, account.salt, account.password_hash):
@@ -828,7 +832,7 @@ def account_change_username(
         if acc.username == account.username:
             updated_accounts.append(
                 Account(
-                    username=body.newUsername,
+                    username=new_username,
                     salt=acc.salt,
                     password_hash=acc.password_hash,
                     role=acc.role,
