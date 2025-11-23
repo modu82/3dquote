@@ -279,6 +279,18 @@
       background: #fafafa;
       box-sizing: border-box;
     }
+    .mat-price-cell {
+      min-width: 200px;
+    }
+    .mat-price-inputs {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    .mat-price-inputs input {
+      width: 160px;
+      flex-shrink: 0;
+    }
     .inline-config {
       display: grid;
       grid-template-columns: repeat(3, 1fr);
@@ -492,13 +504,6 @@
           <div class="hint">影响保存到记录中心的可见性，管理员可后续调整。</div>
         </div>
 
-        <div>
-          <label for="recordAdoptedFlag">记录状态</label>
-          <div class="time-field">
-            <input id="recordAdoptedFlag" type="checkbox" />
-            <span>标记为“已采用”（仅管理员有效）</span>
-          </div>
-        </div>
       </div>
 
       <div class="actions">
@@ -1132,10 +1137,12 @@
             <option value="VOLUME">按体积（元/m³）</option>
           </select>
         </td>
-        <td>
-          <input type="number" class="mat-price-weight" step="0.1" min="0" value="${pricePerKg}">
-          <input type="number" class="mat-price-volume" step="0.1" min="0" value="${pricePerCubicMeter}" style="display:none;" title="元/立方米">
-          <div class="hint mat-price-hint" style="margin-top:4px;">按重量：元/kg</div>
+        <td class="mat-price-cell">
+          <div class="mat-price-inputs">
+            <input type="number" class="mat-price-weight" step="0.1" min="0" value="${pricePerKg}">
+            <input type="number" class="mat-price-volume" step="0.1" min="0" value="${pricePerCubicMeter}" style="display:none;" title="元/立方米">
+          </div>
+          <div class="hint mat-price-hint" style="margin-top:6px;">按重量：元/kg</div>
         </td>
         <td><button type="button" class="mini-btn mat-delete">删</button></td>
       `;
@@ -1881,7 +1888,6 @@
       const adminMain = document.getElementById("adminMain");
       const recordsTab = document.querySelector('.main-tabs .page-tab[data-main="recordsMain"]');
       const recordsMain = document.getElementById("recordsMain");
-      const recordAdopted = document.getElementById("recordAdoptedFlag");
       const recordVisibilitySelect = document.getElementById("recordVisibilitySelect");
       const recordVisibilityWrap = recordVisibilitySelect?.closest("div");
       const recordsVisibilityFilterWrap = document.getElementById("recordsVisibilityFilterWrap");
@@ -1914,10 +1920,6 @@
         recordsMain.style.display = canSeeRecordsTab ? "" : "none";
       }
 
-      if (recordAdopted) {
-        recordAdopted.checked = false;
-        recordAdopted.disabled = !isAdmin;
-      }
       if (recordVisibilitySelect) {
         recordVisibilitySelection = isAdmin ? recordVisibilitySelection : "owner_only";
         recordVisibilitySelect.value = recordVisibilitySelection;
@@ -2347,12 +2349,15 @@
 
     async function persistQuoteResult(quote) {
       if (!recordSavingEnabled) return;
+      if (!isAuthenticated()) {
+        alert("当前未登录，已跳过保存报价记录。");
+        return;
+      }
       try {
         const recordVisibility = isAdmin
           ? (document.getElementById("recordVisibilitySelect")?.value || "admin_only")
           : "owner_only";
-        const recordAdopted = isAdmin && document.getElementById("recordAdoptedFlag")?.checked ? true : false;
-        await fetch(`${API_BASE}/quotes`, {
+        const resp = await fetch(`${API_BASE}/quotes`, {
           method: "POST",
           headers: { "Content-Type": "application/json", ...authHeaders() },
           body: JSON.stringify({
@@ -2373,16 +2378,19 @@
             weight: quote.weight,
             volume: quote.volume,
             totalHours: quote.totalHours,
-            visibility: recordVisibility,
-            adopted: recordAdopted
+            visibility: recordVisibility
           })
         });
+        const data = await resp.json().catch(() => ({}));
+        if (!resp.ok) throw new Error(data.detail || `HTTP ${resp.status}`);
+        alert("报价记录已保存。");
         if (isAdmin) {
           renderQuoteRecords();
           renderQuoteSummary();
         }
       } catch (e) {
         console.warn("保存报价记录失败", e);
+        alert(`保存报价记录失败：${e.message || "未知错误"}`);
       }
     }
 
