@@ -333,6 +333,9 @@
       border-color: #0070f3;
     }
     .page-tab:hover { background: #1f2937; }
+    .main-section { display: none; }
+    .main-section.active { display: block; }
+    .sub-tabs { margin-bottom: 6px; }
     .section { display: none; }
     .section.active { display: block; }
     .pager {
@@ -363,7 +366,6 @@
       <div class="auth-meta" id="userStatus">请先登录后使用报价功能。</div>
       <div class="auth-actions">
         <button type="button" class="mini-btn" id="userLogoutBtn" style="display:none;">退出登录</button>
-        <button type="button" class="mini-btn" id="adminAuthBtn">管理员登录</button>
       </div>
     </div>
 
@@ -378,21 +380,19 @@
           <label for="userLoginPassword">密码</label>
           <input id="userLoginPassword" type="password" placeholder="请输入密码" />
         </div>
-        <button type="button" id="userLoginBtn">用户登录</button>
+        <button type="button" id="userLoginBtn">登录</button>
       </div>
-      <div class="hint">普通用户登录后可进行报价计算；管理员点击右侧按钮登录后可管理配置和记录。</div>
+      <div class="hint">不同账户对应不同权限：管理员登录后可管理配置、报价记录与用户；普通账号可进行报价计算。</div>
     </div>
 
     <div id="appContent" style="display:none;">
 
-    <div class="page-tabs">
-      <button class="page-tab active" data-section="quoteSection">报价计算</button>
-      <button class="page-tab" data-section="paramsSection" data-require-admin="true">参数配置</button>
-      <button class="page-tab" data-section="materialsSection" data-require-admin="true">材料设置</button>
-      <button class="page-tab" data-section="machinesSection" data-require-admin="true">设备设置</button>
-      <button class="page-tab" data-section="recordsSection" data-require-admin="true">报价记录</button>
+    <div class="page-tabs main-tabs">
+      <button class="page-tab active" data-main="quoteMain">报价工作台</button>
+      <button class="page-tab" data-main="adminMain" data-require-admin="true">管理中心</button>
     </div>
 
+    <div class="main-section active" id="quoteMain">
     <div class="section active" id="quoteSection">
 
     <!-- 报价表单 -->
@@ -497,9 +497,19 @@
     </div>
 
     </div> <!-- /quoteSection -->
+    </div> <!-- /quoteMain -->
+
+    <div class="main-section" id="adminMain" style="display:none;">
+      <div class="page-tabs sub-tabs" id="adminTabs">
+        <button class="page-tab active" data-section="paramsSection">参数配置</button>
+        <button class="page-tab" data-section="materialsSection">材料设置</button>
+        <button class="page-tab" data-section="machinesSection">设备设置</button>
+        <button class="page-tab" data-section="recordsSection">报价记录</button>
+        <button class="page-tab" data-section="userManagementSection">用户管理</button>
+      </div>
 
     <!-- 管理员设置区域（登录后可见） -->
-    <div class="settings section" id="paramsSection" data-require-admin="true">
+    <div class="settings section admin-sub-section active" id="paramsSection">
       <h3>
         全局参数
         <div>
@@ -571,7 +581,7 @@
       </h3>
     </div>
 
-    <div class="settings section" id="materialsSection" data-require-admin="true">
+    <div class="settings section admin-sub-section" id="materialsSection" data-require-admin="true">
       <!-- 材料设置 -->
       <h3 style="display:flex;justify-content:space-between;align-items:center;">
         材料设置
@@ -617,7 +627,7 @@
       </h3>
     </div>
 
-    <div class="settings section" id="machinesSection" data-require-admin="true">
+    <div class="settings section admin-sub-section" id="machinesSection" data-require-admin="true">
       <!-- 设备设置 -->
       <h3 style="display:flex;justify-content:space-between;align-items:center;">
         设备设置
@@ -670,7 +680,7 @@
       </h3>
     </div>
 
-    <div class="section" id="recordsSection" data-require-admin="true">
+    <div class="section admin-sub-section" id="recordsSection" data-require-admin="true">
       <h3>报价记录</h3>
       <small>需要管理员登录后查看和统计；每次计算完成会自动保存一条记录。</small>
       <div class="inline-config">
@@ -696,7 +706,45 @@
       <h4>月度汇总</h4>
       <div id="recordsSummary"></div>
     </div>
+
+    <div class="section admin-sub-section" id="userManagementSection">
+      <h3>用户管理</h3>
+      <small>仅管理员可见：新增普通用户或管理员，重置密码、启用/禁用账号。</small>
+      <div class="inline-config">
+        <div>
+          <label for="newUserName">用户名</label>
+          <input id="newUserName" type="text" placeholder="请输入新用户名" />
+        </div>
+        <div>
+          <label for="newUserPassword">初始密码</label>
+          <input id="newUserPassword" type="password" placeholder="设置初始密码" />
+        </div>
+        <div>
+          <label for="newUserRole">角色</label>
+          <select id="newUserRole">
+            <option value="user">普通用户</option>
+            <option value="admin">管理员</option>
+          </select>
+        </div>
+        <div style="display:flex;align-items:flex-end;">
+          <button type="button" class="mini-btn" id="createUserBtn">新增用户</button>
+        </div>
+      </div>
+      <div class="table-wrapper">
+        <table>
+          <thead>
+            <tr>
+              <th>用户名</th>
+              <th>角色</th>
+              <th>状态</th>
+              <th>操作</th>
+            </tr>
+          </thead>
+          <tbody id="userTableBody"></tbody>
+        </table>
+      </div>
     </div>
+    </div> <!-- /adminMain -->
   </div>
 
   <script>
@@ -752,17 +800,15 @@
     let runtimeConfig = JSON.parse(JSON.stringify(CLIENT_DEFAULTS));
     let lastQuote = null;
 
-    const USER_SESSION_KEY = "quote_user_session";
-    const ADMIN_SESSION_KEY = "quote_admin_session";
+    const SESSION_KEY = "quote_session_token";
     const MATERIALS_PAGE_SIZE_KEY = "quote_materials_page_size";
     const MACHINES_PAGE_SIZE_KEY = "quote_machines_page_size";
     const RECORDS_PAGE_SIZE_KEY = "quote_records_page_size";
-    let userSessionToken = localStorage.getItem(USER_SESSION_KEY) || null;
-    let adminSessionToken = localStorage.getItem(ADMIN_SESSION_KEY) || null;
+    let sessionToken = localStorage.getItem(SESSION_KEY) || null;
+    let sessionRole = null;
+    let sessionUsername = "";
     let isUser = false;
     let isAdmin = false;
-    let userUsername = "";
-    let adminUsername = "";
     let settingsLoaded = false;
 
     let currentMaterialsVendor = VENDOR_FILTER_ALL;
@@ -783,13 +829,16 @@
 
     function authHeaders() {
       const headers = {};
-      if (userSessionToken) headers["X-User-Session"] = userSessionToken;
-      if (adminSessionToken) headers["X-Admin-Session"] = adminSessionToken;
+      if (sessionToken) {
+        headers["X-Session"] = sessionToken;
+        if (isAdmin) headers["X-Admin-Session"] = sessionToken;
+        else headers["X-User-Session"] = sessionToken;
+      }
       return headers;
     }
 
     function isAuthenticated() {
-      return isUser || isAdmin;
+      return !!sessionToken;
     }
 
     function isProcessMatch(itemProcess, current) {
@@ -1656,10 +1705,24 @@
     }
 
     // ===== 登录 / 权限控制 =====
-    function setActiveTab(btn) {
+    function setMainTab(btn) {
       if (!btn) return;
-      document.querySelectorAll(".page-tab").forEach(b => b.classList.remove("active"));
-      document.querySelectorAll(".section").forEach(sec => sec.classList.remove("active"));
+      document.querySelectorAll(".main-tabs .page-tab").forEach(b => b.classList.remove("active"));
+      document.querySelectorAll(".main-section").forEach(sec => sec.classList.remove("active"));
+      btn.classList.add("active");
+      const id = btn.getAttribute("data-main");
+      const target = document.getElementById(id);
+      if (target) target.classList.add("active");
+      if (id === "adminMain") {
+        const firstAdminTab = document.querySelector('#adminTabs .page-tab');
+        setAdminSubTab(firstAdminTab);
+      }
+    }
+
+    function setAdminSubTab(btn) {
+      if (!btn) return;
+      document.querySelectorAll("#adminTabs .page-tab").forEach(b => b.classList.remove("active"));
+      document.querySelectorAll(".admin-sub-section").forEach(sec => sec.classList.remove("active"));
       btn.classList.add("active");
       const id = btn.getAttribute("data-section");
       const target = document.getElementById(id);
@@ -1671,7 +1734,8 @@
       const appContent = document.getElementById("appContent");
       const statusEl = document.getElementById("userStatus");
       const logoutBtn = document.getElementById("userLogoutBtn");
-      const adminBtn = document.getElementById("adminAuthBtn");
+      const adminTab = document.querySelector('.main-tabs .page-tab[data-main="adminMain"]');
+      const adminMain = document.getElementById("adminMain");
 
       const authed = isAuthenticated();
       if (loginPanel) loginPanel.style.display = authed ? "none" : "";
@@ -1679,87 +1743,64 @@
       if (logoutBtn) logoutBtn.style.display = authed ? "" : "none";
 
       if (statusEl) {
-        if (isAdmin) statusEl.textContent = `管理员已登录：${adminUsername || ""}`;
-        else if (isUser) statusEl.textContent = `已登录用户：${userUsername || ""}`;
+        if (isAdmin) statusEl.textContent = `管理员已登录：${sessionUsername || ""}`;
+        else if (isUser) statusEl.textContent = `已登录用户：${sessionUsername || ""}`;
         else statusEl.textContent = "请先登录后使用报价功能。";
       }
 
-      if (adminBtn) adminBtn.textContent = isAdmin ? "退出管理员" : "管理员登录";
-
-      document.querySelectorAll("[data-require-admin]").forEach(el => {
-        el.style.display = isAdmin ? "" : "none";
-      });
-
-      const activeTab = document.querySelector(".page-tab.active");
-      if (activeTab && activeTab.dataset.requireAdmin && !isAdmin) {
-        const quoteTab = document.querySelector('.page-tab[data-section="quoteSection"]');
-        setActiveTab(quoteTab);
+      if (adminTab) adminTab.style.display = isAdmin ? "" : "none";
+      if (!isAdmin) {
+        setMainTab(document.querySelector('.main-tabs .page-tab[data-main="quoteMain"]'));
       }
-    }
-
-    async function checkAdminStatus() {
-      if (!adminSessionToken) {
-        isAdmin = false;
-        adminUsername = "";
-        return;
+      if (adminMain) {
+        adminMain.style.display = isAdmin ? "" : "none";
       }
-      try {
-        const resp = await fetch(`${API_BASE}/admin/status`, {
-          headers: { "X-Admin-Session": adminSessionToken }
-        });
-        if (!resp.ok) throw new Error("HTTP " + resp.status);
-        const data = await resp.json();
-        if (data.authenticated) {
-          isAdmin = true;
-          adminUsername = data.username || "";
-        } else {
-          isAdmin = false;
-          adminUsername = "";
-          adminSessionToken = null;
-          localStorage.removeItem(ADMIN_SESSION_KEY);
+      const activeAdminTab = document.querySelector('#adminTabs .page-tab.active');
+      if (isAdmin && activeAdminTab) {
+        const targetId = activeAdminTab.getAttribute("data-section");
+        if (targetId === "recordsSection") {
+          renderQuoteRecords();
+          renderQuoteSummary();
         }
-      } catch (e) {
-        console.warn("检查管理员状态失败:", e);
-        isAdmin = false;
-        adminUsername = "";
-        adminSessionToken = null;
-        localStorage.removeItem(ADMIN_SESSION_KEY);
-      }
-    }
-
-    async function checkUserStatus() {
-      if (!userSessionToken) {
-        isUser = false;
-        userUsername = "";
-        return;
-      }
-      try {
-        const resp = await fetch(`${API_BASE}/user/status`, {
-          headers: { "X-User-Session": userSessionToken }
-        });
-        if (!resp.ok) throw new Error("HTTP " + resp.status);
-        const data = await resp.json();
-        if (data.authenticated) {
-          isUser = true;
-          userUsername = data.username || "";
-        } else {
-          isUser = false;
-          userUsername = "";
-          userSessionToken = null;
-          localStorage.removeItem(USER_SESSION_KEY);
-        }
-      } catch (e) {
-        console.warn("检查用户状态失败:", e);
-        isUser = false;
-        userUsername = "";
-        userSessionToken = null;
-        localStorage.removeItem(USER_SESSION_KEY);
       }
     }
 
     async function refreshAuthState(forceReload = false) {
-      await checkAdminStatus();
-      await checkUserStatus();
+      if (!sessionToken) {
+        isAdmin = false;
+        isUser = false;
+        sessionRole = null;
+        sessionUsername = "";
+        updateAuthUI();
+        return;
+      }
+      try {
+        const resp = await fetch(`${API_BASE}/auth/status`, { headers: authHeaders() });
+        if (!resp.ok) throw new Error("HTTP " + resp.status);
+        const data = await resp.json();
+        if (data.authenticated) {
+          sessionRole = data.role;
+          sessionUsername = data.username || "";
+          isAdmin = sessionRole === "admin";
+          isUser = sessionRole === "user" || sessionRole === "admin";
+        } else {
+          sessionToken = null;
+          sessionRole = null;
+          sessionUsername = "";
+          localStorage.removeItem(SESSION_KEY);
+          isAdmin = false;
+          isUser = false;
+        }
+      } catch (e) {
+        console.warn("检查登录状态失败:", e);
+        sessionToken = null;
+        sessionRole = null;
+        sessionUsername = "";
+        localStorage.removeItem(SESSION_KEY);
+        isAdmin = false;
+        isUser = false;
+      }
+
       updateAuthUI();
       if (isAuthenticated() && (forceReload || !settingsLoaded)) {
         await loadSettingsFromServer();
@@ -1767,6 +1808,7 @@
       if (isAdmin) {
         renderQuoteRecords();
         renderQuoteSummary();
+        renderUserTable();
       }
     }
 
@@ -1836,6 +1878,102 @@
       }
     }
 
+    async function fetchUsers() {
+      const resp = await fetch(`${API_BASE}/admin/users`, { headers: authHeaders() });
+      if (!resp.ok) throw new Error("无法获取用户列表，请确认已登录管理员");
+      return resp.json();
+    }
+
+    async function renderUserTable() {
+      if (!isAdmin) return;
+      const tbody = document.getElementById("userTableBody");
+      if (!tbody) return;
+      tbody.innerHTML = "<tr><td colspan='4'>加载中...</td></tr>";
+      try {
+        const users = await fetchUsers();
+        if (!Array.isArray(users) || users.length === 0) {
+          tbody.innerHTML = "<tr><td colspan='4'>暂无用户</td></tr>";
+          return;
+        }
+        tbody.innerHTML = "";
+        users.forEach(user => {
+          const tr = document.createElement("tr");
+          tr.innerHTML = `
+            <td>${user.username}</td>
+            <td>${user.role === "admin" ? "管理员" : "普通用户"}</td>
+            <td>${user.active ? "启用" : "禁用"}</td>
+            <td>
+              <button type="button" class="mini-btn" data-action="reset" data-username="${user.username}">重置密码</button>
+              <button type="button" class="mini-btn" data-action="toggle" data-username="${user.username}" data-active="${user.active}">
+                ${user.active ? "禁用" : "启用"}
+              </button>
+            </td>
+          `;
+          tbody.appendChild(tr);
+        });
+      } catch (e) {
+        tbody.innerHTML = `<tr><td colspan='4'>${e.message || "加载失败"}</td></tr>`;
+      }
+    }
+
+    async function createUser() {
+      const name = document.getElementById("newUserName").value.trim();
+      const pwd = document.getElementById("newUserPassword").value;
+      const role = document.getElementById("newUserRole").value;
+      if (!name || !pwd) {
+        alert("请输入用户名和初始密码");
+        return;
+      }
+      try {
+        const resp = await fetch(`${API_BASE}/admin/users`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json", ...authHeaders() },
+          body: JSON.stringify({ username: name, password: pwd, role, active: true })
+        });
+        const data = await resp.json().catch(() => ({}));
+        if (!resp.ok) throw new Error(data.detail || "创建失败");
+        document.getElementById("newUserName").value = "";
+        document.getElementById("newUserPassword").value = "";
+        document.getElementById("newUserRole").value = "user";
+        await renderUserTable();
+        alert("用户已创建");
+      } catch (e) {
+        alert(e.message || "创建失败");
+      }
+    }
+
+    async function toggleUser(username, active) {
+      try {
+        const resp = await fetch(`${API_BASE}/admin/users/${encodeURIComponent(username)}/toggle`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json", ...authHeaders() },
+          body: JSON.stringify({ active })
+        });
+        const data = await resp.json().catch(() => ({}));
+        if (!resp.ok) throw new Error(data.detail || "操作失败");
+        await renderUserTable();
+      } catch (e) {
+        alert(e.message || "操作失败");
+      }
+    }
+
+    async function resetUserPassword(username) {
+      const newPwd = window.prompt(`请输入为 ${username} 设置的新密码：`);
+      if (!newPwd) return;
+      try {
+        const resp = await fetch(`${API_BASE}/admin/users/${encodeURIComponent(username)}/reset-password`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json", ...authHeaders() },
+          body: JSON.stringify({ newPassword: newPwd })
+        });
+        const data = await resp.json().catch(() => ({}));
+        if (!resp.ok) throw new Error(data.detail || "重置失败");
+        alert("密码已重置");
+      } catch (e) {
+        alert(e.message || "重置失败");
+      }
+    }
+
     async function persistQuoteResult(quote) {
       try {
         await fetch(`${API_BASE}/quotes`, {
@@ -1879,7 +2017,7 @@
       }
 
       try {
-        const resp = await fetch(`${API_BASE}/user/login`, {
+        const resp = await fetch(`${API_BASE}/auth/login`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ username, password })
@@ -1889,100 +2027,46 @@
           throw new Error(err.detail || "登录失败");
         }
         const data = await resp.json();
-        userSessionToken = data.token;
-        userUsername = data.username;
-        isUser = true;
-        localStorage.setItem(USER_SESSION_KEY, userSessionToken);
+        sessionToken = data.token;
+        sessionUsername = data.username;
+        sessionRole = data.role;
+        isAdmin = sessionRole === "admin";
+        isUser = sessionRole === "user" || sessionRole === "admin";
+        localStorage.setItem(SESSION_KEY, sessionToken);
         await refreshAuthState(true);
-        alert("登录成功");
+        alert(`登录成功，当前角色：${sessionRole === "admin" ? "管理员" : "普通用户"}`);
       } catch (e) {
         alert("登录失败：" + e.message);
       }
     }
 
-    async function userLogoutFlow() {
-      if (userSessionToken) {
+    async function logoutFlow() {
+      if (sessionToken) {
         try {
-          await fetch(`${API_BASE}/user/logout`, {
+          await fetch(`${API_BASE}/auth/logout`, {
             method: "POST",
-            headers: { "X-User-Session": userSessionToken }
+            headers: { ...authHeaders() },
           });
         } catch (e) {
-          console.warn("用户登出失败：", e);
+          console.warn("登出失败：", e);
         }
       }
-      userSessionToken = null;
+      sessionToken = null;
+      sessionRole = null;
+      sessionUsername = "";
       isUser = false;
-      userUsername = "";
-      localStorage.removeItem(USER_SESSION_KEY);
-      if (!isAdmin) settingsLoaded = false;
-      updateAuthUI();
-    }
-
-    async function adminLoginFlow() {
-      const username = window.prompt("请输入管理员用户名：", "admin");
-      if (!username) return;
-      const password = window.prompt("请输入管理员密码：");
-      if (!password) return;
-
-      try {
-        const resp = await fetch(`${API_BASE}/admin/login`, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ username, password })
-        });
-        if (!resp.ok) {
-          const err = await resp.json().catch(() => ({}));
-          throw new Error(err.detail || "登录失败");
-        }
-        const data = await resp.json();
-        adminSessionToken = data.token;
-        adminUsername = data.username;
-        isAdmin = true;
-        localStorage.setItem(ADMIN_SESSION_KEY, adminSessionToken);
-        await refreshAuthState(true);
-        alert("登录成功");
-      } catch (e) {
-        alert("登录失败：" + e.message);
-      }
-    }
-
-    async function adminLogoutFlow() {
-      if (!adminSessionToken) {
-        isAdmin = false;
-        adminUsername = "";
-        updateAuthUI();
-        return;
-      }
-      try {
-        await fetch(`${API_BASE}/admin/logout`, {
-          method: "POST",
-          headers: { "X-Admin-Session": adminSessionToken }
-        });
-      } catch (e) {
-        console.warn("登出请求失败：", e);
-      }
-      adminSessionToken = null;
       isAdmin = false;
-      adminUsername = "";
-      localStorage.removeItem(ADMIN_SESSION_KEY);
+      localStorage.removeItem(SESSION_KEY);
+      settingsLoaded = false;
       updateAuthUI();
-      if (!isAuthenticated()) settingsLoaded = false;
     }
 
-    document.getElementById("adminAuthBtn").addEventListener("click", () => {
-      if (isAdmin) {
-        adminLogoutFlow();
-      } else {
-        adminLoginFlow();
-      }
-    });
     document.getElementById("userLoginBtn").addEventListener("click", userLoginFlow);
-    document.getElementById("userLogoutBtn").addEventListener("click", userLogoutFlow);
+    document.getElementById("userLogoutBtn").addEventListener("click", logoutFlow);
 
     // ===== 保存设置 & 修改密码 =====
     async function saveSettingsToServer() {
-      if (!isAdmin || !adminSessionToken) {
+      if (!isAdmin || !sessionToken) {
         alert("请先以管理员身份登录。");
         return;
       }
@@ -2075,9 +2159,11 @@
         });
         if (resp.status === 401) {
           isAdmin = false;
-          adminUsername = "";
-          adminSessionToken = null;
-          localStorage.removeItem(ADMIN_SESSION_KEY);
+          isUser = false;
+          sessionUsername = "";
+          sessionRole = null;
+          sessionToken = null;
+          localStorage.removeItem(SESSION_KEY);
           updateAuthUI();
           throw new Error("未登录或会话已过期，请重新登录。");
         }
@@ -2100,7 +2186,7 @@
     }
 
     async function changeAdminPassword() {
-      if (!isAdmin || !adminSessionToken) {
+      if (!isAdmin || !sessionToken) {
         alert("请先以管理员身份登录。");
         return;
       }
@@ -2120,10 +2206,12 @@
           throw new Error(data.detail || "修改失败");
         }
         alert("密码已更新，请使用新密码重新登录。");
-        adminSessionToken = null;
+        sessionToken = null;
+        sessionRole = null;
+        sessionUsername = "";
         isAdmin = false;
-        adminUsername = "";
-        localStorage.removeItem(ADMIN_SESSION_KEY);
+        isUser = false;
+        localStorage.removeItem(SESSION_KEY);
         updateAuthUI();
       } catch (e) {
         alert("修改密码失败：" + e.message);
@@ -2147,6 +2235,20 @@
     document.getElementById("addPostProcessBtn").addEventListener("click", () => {
       appendPostProcessRow();
       rebuildPostProcessOptions();
+    });
+
+    document.getElementById("createUserBtn").addEventListener("click", createUser);
+    document.getElementById("userTableBody").addEventListener("click", (e) => {
+      const btn = e.target.closest("button[data-action]");
+      if (!btn) return;
+      const username = btn.getAttribute("data-username");
+      const action = btn.getAttribute("data-action");
+      if (action === "reset") {
+        resetUserPassword(username);
+      } else if (action === "toggle") {
+        const active = btn.getAttribute("data-active") === "true";
+        toggleUser(username, !active);
+      }
     });
 
     // ===== 报价计算 & 导出 =====
@@ -2362,13 +2464,27 @@
 
     // ===== 页面初始化 =====
     window.addEventListener("DOMContentLoaded", async () => {
-      document.querySelectorAll(".page-tab").forEach(btn => {
+      document.querySelectorAll(".main-tabs .page-tab").forEach(btn => {
         btn.addEventListener("click", () => {
-          if (btn.dataset.requireAdmin && !isAdmin) {
-            alert("仅管理员可访问，请先登录管理员账号。");
+          if (btn.dataset.main === "adminMain" && !isAdmin) {
+            alert("仅管理员可访问，请先使用管理员账户登录。");
             return;
           }
-          setActiveTab(btn);
+          setMainTab(btn);
+        });
+      });
+
+      document.querySelectorAll("#adminTabs .page-tab").forEach(btn => {
+        btn.addEventListener("click", () => {
+          setAdminSubTab(btn);
+          const targetId = btn.getAttribute("data-section");
+          if (targetId === "recordsSection") {
+            renderQuoteRecords();
+            renderQuoteSummary();
+          }
+          if (targetId === "userManagementSection") {
+            renderUserTable();
+          }
         });
       });
       initProcessTypeSelector();

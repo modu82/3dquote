@@ -3,7 +3,7 @@
 一个用于 3D 打印、CNC 雕刻、激光雕刻/切割等工艺的轻量化报价工具。项目包含：
 
 - **纯前端单页**（`3d_quote.html`）：输入模型信息，调用后端获取材料/设备配置，计算报价并展示结果。
-- **FastAPI 后端**（`quote_api.py`）：提供报价配置读取/写入接口、管理员登录及密码修改接口。
+- **FastAPI 后端**（`quote_api.py`）：提供报价配置读取/写入接口、统一登录与账号管理、报价记录存储与统计接口。
 - **Docker 支持**：`docker-compose.yml` 帮助快速启动后端并持久化配置。
 
 ---
@@ -14,7 +14,7 @@
 - 🧵 支持多种工艺与厂商：FDM/光固化 3D 打印、CNC 雕刻、CO₂ 激光雕刻/切割等，可按厂商和工艺分类材料、设备。
 - ⚙️ 细致的成本参数：材料单价、设备小时费用、电费、人工/管理成本、人机比等。
 - 🧩 后处理规则：按重量/件数估算打磨、上色等额外耗时与成本，可按工艺区分并设置成本系数。
-- 🔐 登录与权限：普通用户登录后才能使用报价计算；管理员登录可管理配置、查看报价记录并修改密码，账号信息保存在 `./data/`。
+- 🔐 登录与权限：普通用户登录后才能使用报价计算；管理员登录可管理配置、查看报价记录、维护用户账号并修改密码，账号信息保存在 `./data/`。
 
 ---
 
@@ -49,30 +49,30 @@
    ```
 3. 同样在 `3d_quote.html` 内将 `API_BASE` 指向你的后端地址。
 
-> 可通过环境变量 `ADMIN_USER` 和 `ADMIN_PASS` 调整默认管理员账号（默认 `admin / changeme`），通过 `USER_USER` 和 `USER_PASS` 调整默认普通用户账号（默认 `user / 123456`）。首次启动时会在 `./data/admin_account.json` 与 `./data/user_account.json` 中生成账号文件。
+> 可通过环境变量 `ADMIN_USER` 和 `ADMIN_PASS` 调整默认管理员账号（默认 `admin / changeme`），通过 `USER_USER` 和 `USER_PASS` 调整默认普通用户账号（默认 `user / 123456`）。首次启动会在 `./data/accounts.json` 中生成账号文件（旧版的 `admin_account.json`、`user_account.json` 会被自动迁移）。
 
 ---
 
 ## API 概览
 
 - `GET /api/settings`：登录后获取当前报价配置（材料、设备、利润率、后处理规则等）。
-- `POST /api/settings`：更新报价配置，需在请求头携带 `X-Admin-Session`。
-- `POST /api/user/login` / `POST /api/user/logout` / `GET /api/user/status`：普通用户登录、退出、查询会话状态。
-- `POST /api/admin/login`：管理员登录，返回 `token`，后续请求需放入 `X-Admin-Session` 头。
-- `POST /api/admin/logout`：注销当前会话。
-- `GET /api/admin/status`：查询 session 是否有效。
-- `POST /api/admin/change-password`：修改管理员密码，需有效会话并提供旧密码。
+- `POST /api/settings`：更新报价配置，需在请求头携带有效管理员会话（支持 `X-Session` 或 `X-Admin-Session`）。
+- `POST /api/auth/login` / `POST /api/auth/logout` / `GET /api/auth/status`：统一登录/登出与会话状态查询，根据用户名返回 `role`（`user` 或 `admin`）。
+- `POST /api/admin/change-password`：管理员修改自身密码，需有效管理员会话。
+- `GET /api/admin/users` / `POST /api/admin/users`：管理员获取/创建用户（含角色、启用状态）。
+- `POST /api/admin/users/{username}/toggle`：启用或禁用指定用户。
+- `POST /api/admin/users/{username}/reset-password`：重置用户密码。
 - `POST /api/quotes`：保存一次报价记录，需登录用户或管理员。
-- `GET /api/quotes`：管理员查看报价记录，支持分页与按月份筛选。
-- `GET /api/quotes/summary`：管理员查看按月汇总的报价数量与金额。
+ - `GET /api/quotes`：管理员查看报价记录，支持分页与按月份筛选。
+ - `GET /api/quotes/summary`：管理员查看按月汇总的报价数量与金额。
 
-配置持久化文件位于 `./data/settings.json` 与 `./data/admin_account.json`，可备份或通过 Docker 卷挂载到其他路径。
+配置持久化文件位于 `./data/settings.json` 与 `./data/accounts.json`，可备份或通过 Docker 卷挂载到其他路径。
 
 ---
 
 ## 使用小贴士
 
 - 前端页面默认填充了演示材料、设备和后处理参数，访问时会尝试从后端 `/api/settings` 读取最新配置。
-- 通过页面右上角的“管理员登录”按钮输入凭证后，可在“参数配置”区域增删材料/设备、调整利润率和后处理规则；保存会调用 `POST /api/settings`。
+- 登录后进入“管理中心”可在“参数配置”区域增删材料/设备、调整利润率和后处理规则；保存会调用 `POST /api/settings`。
 - 如需在局域网部署，请确保浏览器能访问后端地址并相应更新 `API_BASE`。
 

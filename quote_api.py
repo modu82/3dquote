@@ -23,6 +23,7 @@ app.add_middleware(
 SETTINGS_FILE = "/data/settings.json"
 ACCOUNT_FILE = "/data/admin_account.json"
 USER_ACCOUNT_FILE = "/data/user_account.json"
+ACCOUNTS_FILE = "/data/accounts.json"
 QUOTES_FILE = "/data/quotes.json"
 
 # 初始管理员信息（如果 ACCOUNT_FILE 不存在，就用这个创建）
@@ -34,6 +35,7 @@ DEFAULT_USER_PASS = os.getenv("USER_PASS", "123456")
 
 SESSION_HEADER = "X-Admin-Session"
 USER_SESSION_HEADER = "X-User-Session"
+GENERIC_SESSION_HEADER = "X-Session"
 
 
 # ====== Pydantic 模型 ======
@@ -83,14 +85,12 @@ class Settings(BaseModel):
     # 新增：后处理规则列表
     postProcessRules: List[PostProcessRule] = []
 
-class AdminAccount(BaseModel):
+class Account(BaseModel):
     username: str
     salt: str
     password_hash: str
-
-
-class UserAccount(AdminAccount):
-    pass
+    role: Literal["admin", "user"] = "user"
+    active: bool = True
 
 
 class LoginRequest(BaseModel):
@@ -101,6 +101,7 @@ class LoginRequest(BaseModel):
 class LoginResponse(BaseModel):
     token: str
     username: str
+    role: Literal["admin", "user"]
 
 
 class ChangePasswordRequest(BaseModel):
@@ -298,7 +299,7 @@ def save_settings(settings: Settings):
         json.dump(settings.dict(), f, ensure_ascii=False, indent=2)
 
 
-# ====== 工具函数：密码 & 管理员账户 ======
+# ====== 工具函数：密码 & 账户 ======
 
 def hash_password(password: str, salt: str) -> str:
     return hashlib.sha256((salt + password).encode("utf-8")).hexdigest()
@@ -308,58 +309,73 @@ def verify_password(password: str, salt: str, password_hash: str) -> bool:
     return hash_password(password, salt) == password_hash
 
 
-def load_admin_account() -> AdminAccount:
-    """从文件读取管理员账户，不存在则用默认用户名/密码创建。"""
+def save_accounts(accounts: List[Account]):
+    os.makedirs(os.path.dirname(ACCOUNTS_FILE), exist_ok=True)
+    with open(ACCOUNTS_FILE, "w", encoding="utf-8") as f:
+        json.dump([a.dict() for a in accounts], f, ensure_ascii=False, indent=2)
+
+
+def load_accounts() -> List[Account]:
+    # 优先读取新的多账户文件
+    if os.path.exists(ACCOUNTS_FILE):
+        try:
+            with open(ACCOUNTS_FILE, "r", encoding="utf-8") as f:
+                data = json.load(f) or []
+            loaded = [Account(**item) for item in data]
+            if any(acc.role == "admin" and acc.active for acc in loaded):
+                return loaded
+        except Exception as e:
+            print("Failed to load accounts.json, fallback to defaults:", e)
+
+    migrated: List[Account] = []
+    # 兼容旧版的 admin_account.json
     if os.path.exists(ACCOUNT_FILE):
         try:
             with open(ACCOUNT_FILE, "r", encoding="utf-8") as f:
                 data = json.load(f)
-            return AdminAccount(**data)
+            migrated.append(Account(**data, role="admin", active=True))
         except Exception as e:
-            print("Failed to load admin_account.json, using default admin:", e)
-
-    # 创建默认账号
-    salt = secrets.token_hex(16)
-    password_hash = hash_password(DEFAULT_ADMIN_PASS, salt)
-    account = AdminAccount(username=DEFAULT_ADMIN_USER, salt=salt, password_hash=password_hash)
-    save_admin_account(account)
-    print(f"[INIT] Created default admin account username={DEFAULT_ADMIN_USER}, password={DEFAULT_ADMIN_PASS}")
-    return account
-
-
-def save_admin_account(account: AdminAccount):
-    os.makedirs(os.path.dirname(ACCOUNT_FILE), exist_ok=True)
-    with open(ACCOUNT_FILE, "w", encoding="utf-8") as f:
-        json.dump(account.dict(), f, ensure_ascii=False, indent=2)
-
-
-ADMIN_ACCOUNT: AdminAccount = load_admin_account()
-
-
-def load_user_account() -> UserAccount:
-    """从文件读取普通用户账户，不存在则用默认用户名/密码创建。"""
+            print("Failed to migrate admin account:", e)
+    # 兼容旧版的 user_account.json
     if os.path.exists(USER_ACCOUNT_FILE):
         try:
             with open(USER_ACCOUNT_FILE, "r", encoding="utf-8") as f:
                 data = json.load(f)
-            return UserAccount(**data)
+            migrated.append(Account(**data, role="user", active=True))
         except Exception as e:
-            print("Failed to load user_account.json, using default user:", e)
+            print("Failed to migrate user account:", e)
 
-    salt = secrets.token_hex(16)
-    password_hash = hash_password(DEFAULT_USER_PASS, salt)
-    account = UserAccount(username=DEFAULT_USER_USER, salt=salt, password_hash=password_hash)
-    save_user_account(account)
+    if migrated:
+        save_accounts(migrated)
+        return migrated
+
+    # 默认初始化至少一个管理员与一个普通用户
+    salt_admin = secrets.token_hex(16)
+    salt_user = secrets.token_hex(16)
+    defaults = [
+        Account(
+            username=DEFAULT_ADMIN_USER,
+            salt=salt_admin,
+            password_hash=hash_password(DEFAULT_ADMIN_PASS, salt_admin),
+            role="admin",
+            active=True,
+        ),
+        Account(
+            username=DEFAULT_USER_USER,
+            salt=salt_user,
+            password_hash=hash_password(DEFAULT_USER_PASS, salt_user),
+            role="user",
+            active=True,
+        ),
+    ]
+    save_accounts(defaults)
     print(
-        f"[INIT] Created default user account username={DEFAULT_USER_USER}, password={DEFAULT_USER_PASS}"
+        f"[INIT] Created default admin={DEFAULT_ADMIN_USER}/{DEFAULT_ADMIN_PASS}, user={DEFAULT_USER_USER}/{DEFAULT_USER_PASS}"
     )
-    return account
+    return defaults
 
 
-def save_user_account(account: UserAccount):
-    os.makedirs(os.path.dirname(USER_ACCOUNT_FILE), exist_ok=True)
-    with open(USER_ACCOUNT_FILE, "w", encoding="utf-8") as f:
-        json.dump(account.dict(), f, ensure_ascii=False, indent=2)
+ACCOUNTS: List[Account] = load_accounts()
 
 
 USER_ACCOUNT: UserAccount = load_user_account()
@@ -367,6 +383,13 @@ USER_ACCOUNT: UserAccount = load_user_account()
 # ====== 简单 Session 管理（保存在内存） ======
 
 SESSIONS: Dict[str, Dict[str, str]] = {}  # token -> {username, role}
+
+
+def get_account(username: str) -> Optional[Account]:
+    for acc in ACCOUNTS:
+        if acc.username == username:
+            return acc
+    return None
 
 
 def load_quote_records() -> List[QuoteRecord]:
@@ -402,11 +425,23 @@ def create_session(username: str, role: str) -> str:
 def get_session_from_token(token: Optional[str]) -> Optional[Dict[str, str]]:
     if not token:
         return None
-    return SESSIONS.get(token)
+    session = SESSIONS.get(token)
+    if not session:
+        return None
+    acc = get_account(session.get("username", ""))
+    if not acc or not acc.active or acc.role != session.get("role"):
+        return None
+    return session
 
 
-def require_admin(token: Optional[str]) -> Dict[str, str]:
-    session = get_session_from_token(token)
+def require_admin(
+    admin_token: Optional[str], user_token: Optional[str] = None, generic_token: Optional[str] = None
+) -> Dict[str, str]:
+    session = (
+        get_session_from_token(admin_token)
+        or get_session_from_token(generic_token)
+        or get_session_from_token(user_token)
+    )
     if not session:
         raise HTTPException(status_code=401, detail="未登录或会话已失效")
     if session.get("role") != "admin":
@@ -415,9 +450,13 @@ def require_admin(token: Optional[str]) -> Dict[str, str]:
 
 
 def require_authenticated(
-    user_token: Optional[str], admin_token: Optional[str]
+    user_token: Optional[str], admin_token: Optional[str], generic_token: Optional[str] = None
 ) -> Dict[str, str]:
-    session = get_session_from_token(admin_token) or get_session_from_token(user_token)
+    session = (
+        get_session_from_token(admin_token)
+        or get_session_from_token(generic_token)
+        or get_session_from_token(user_token)
+    )
     if not session:
         raise HTTPException(status_code=401, detail="未登录或会话已失效")
     return session
@@ -429,9 +468,10 @@ def require_authenticated(
 def get_settings(
     x_user_session: Optional[str] = Header(None),
     x_admin_session: Optional[str] = Header(None),
+    x_session: Optional[str] = Header(None),
 ):
     """登录后才能读取设置（用于报价）。"""
-    require_authenticated(x_user_session, x_admin_session)
+    require_authenticated(x_user_session, x_admin_session, x_session)
     return load_settings()
 
 
@@ -440,6 +480,7 @@ def update_settings(
     settings: Settings,
     x_user_session: Optional[str] = Header(None),
     x_admin_session: Optional[str] = Header(None),
+    x_session: Optional[str] = Header(None),
 ):
     """只有登录的管理员才能修改设置。"""
     if len(settings.materials) == 0:
@@ -448,108 +489,237 @@ def update_settings(
         raise HTTPException(status_code=400, detail="至少需要一台设备")
 
     # 权限检查
-    require_admin(x_admin_session)
+    require_admin(x_admin_session, x_user_session, x_session)
 
     save_settings(settings)
     return settings
 
 
-# ====== API：管理员登录 / 登出 / 状态 / 改密码 ======
+# ====== 统一登录 / 登出 / 状态 ======
 
-@app.post("/api/admin/login", response_model=LoginResponse)
-def admin_login(body: LoginRequest):
-    """管理员登录：传用户名+密码，返回 session token。"""
-    global ADMIN_ACCOUNT
 
-    if body.username != ADMIN_ACCOUNT.username:
+def _persist_accounts(accounts: List[Account]):
+    global ACCOUNTS
+    ACCOUNTS = accounts
+    save_accounts(accounts)
+
+
+def invalidate_sessions_for(username: str):
+    to_delete = [token for token, session in SESSIONS.items() if session.get("username") == username]
+    for token in to_delete:
+        del SESSIONS[token]
+
+
+@app.post("/api/auth/login", response_model=LoginResponse)
+def auth_login(body: LoginRequest):
+    """统一的登录接口，支持管理员和普通用户。"""
+    account = next((a for a in ACCOUNTS if a.username == body.username and a.active), None)
+    if not account:
+        raise HTTPException(status_code=401, detail="用户名或密码错误或已被禁用")
+
+    if not verify_password(body.password, account.salt, account.password_hash):
         raise HTTPException(status_code=401, detail="用户名或密码错误")
 
-    if not verify_password(body.password, ADMIN_ACCOUNT.salt, ADMIN_ACCOUNT.password_hash):
-        raise HTTPException(status_code=401, detail="用户名或密码错误")
-
-    token = create_session(ADMIN_ACCOUNT.username, "admin")
-    return LoginResponse(token=token, username=ADMIN_ACCOUNT.username)
+    token = create_session(account.username, account.role)
+    return LoginResponse(token=token, username=account.username, role=account.role)
 
 
-@app.post("/api/admin/logout")
-def admin_logout(x_admin_session: Optional[str] = Header(None)):
-    """管理员退出登录：失效当前 session。"""
-    if x_admin_session and x_admin_session in SESSIONS:
-        del SESSIONS[x_admin_session]
-    return {"message": "已退出登录"}
-
-
-@app.get("/api/admin/status")
-def admin_status(x_admin_session: Optional[str] = Header(None)):
-    """检查当前 session 是否已登录。"""
-    session = get_session_from_token(x_admin_session)
-    is_admin = bool(session) and session.get("role") == "admin"
-    return {
-        "authenticated": is_admin,
-        "username": session.get("username") if is_admin and session else None,
-    }
-
-
-@app.post("/api/admin/change-password")
-def admin_change_password(body: ChangePasswordRequest, x_admin_session: Optional[str] = Header(None)):
-    """修改管理员密码：需要已经登录，并提供旧密码、新密码。"""
-    global ADMIN_ACCOUNT
-
-    session = require_admin(x_admin_session)
-
-    # 再用旧密码校验一遍
-    if not verify_password(body.oldPassword, ADMIN_ACCOUNT.salt, ADMIN_ACCOUNT.password_hash):
-        raise HTTPException(status_code=403, detail="旧密码不正确")
-
-    new_salt = secrets.token_hex(16)
-    new_hash = hash_password(body.newPassword, new_salt)
-    ADMIN_ACCOUNT = AdminAccount(username=session["username"], salt=new_salt, password_hash=new_hash)
-    save_admin_account(ADMIN_ACCOUNT)
-
-    # 可选：所有已有 session 失效
-    SESSIONS.clear()
-
-    return {"message": "密码已更新，请使用新密码重新登录"}
-
-
-# ====== 普通用户登录 / 状态 ======
-
-
-@app.post("/api/user/login", response_model=LoginResponse)
-def user_login(body: LoginRequest):
-    """普通用户登录：返回用户会话 token。"""
-    global USER_ACCOUNT
-
-    if body.username != USER_ACCOUNT.username:
-        raise HTTPException(status_code=401, detail="用户名或密码错误")
-
-    if not verify_password(body.password, USER_ACCOUNT.salt, USER_ACCOUNT.password_hash):
-        raise HTTPException(status_code=401, detail="用户名或密码错误")
-
-    token = create_session(USER_ACCOUNT.username, "user")
-    return LoginResponse(token=token, username=USER_ACCOUNT.username)
-
-
-@app.post("/api/user/logout")
-def user_logout(x_user_session: Optional[str] = Header(None)):
-    """普通用户退出登录。"""
-    if x_user_session and x_user_session in SESSIONS:
-        del SESSIONS[x_user_session]
-    return {"message": "已退出登录"}
-
-
-@app.get("/api/user/status")
-def user_status(
-    x_user_session: Optional[str] = Header(None),
+@app.post("/api/auth/logout")
+def auth_logout(
+    x_session: Optional[str] = Header(None),
     x_admin_session: Optional[str] = Header(None),
+    x_user_session: Optional[str] = Header(None),
 ):
-    """检查普通用户是否已登录；管理员 token 也视为已登录。"""
-    session = get_session_from_token(x_admin_session) or get_session_from_token(x_user_session)
+    for token in [x_session, x_admin_session, x_user_session]:
+        if token and token in SESSIONS:
+            del SESSIONS[token]
+    return {"message": "已退出登录"}
+
+
+@app.get("/api/auth/status")
+def auth_status(
+    x_session: Optional[str] = Header(None),
+    x_admin_session: Optional[str] = Header(None),
+    x_user_session: Optional[str] = Header(None),
+):
+    session = (
+        get_session_from_token(x_session)
+        or get_session_from_token(x_admin_session)
+        or get_session_from_token(x_user_session)
+    )
     is_authed = bool(session) and session.get("role") in {"user", "admin"}
     return {
         "authenticated": is_authed,
         "username": session.get("username") if is_authed and session else None,
+        "role": session.get("role") if is_authed and session else None,
     }
+
+
+@app.post("/api/admin/change-password")
+def admin_change_password(
+    body: ChangePasswordRequest,
+    x_admin_session: Optional[str] = Header(None),
+    x_user_session: Optional[str] = Header(None),
+    x_session: Optional[str] = Header(None),
+):
+    """管理员修改自身密码。"""
+    session = require_admin(x_admin_session, x_user_session, x_session)
+    account = get_account(session["username"])
+    if not account:
+        raise HTTPException(status_code=400, detail="账号不存在")
+
+    if not verify_password(body.oldPassword, account.salt, account.password_hash):
+        raise HTTPException(status_code=403, detail="旧密码不正确")
+
+    new_salt = secrets.token_hex(16)
+    new_hash = hash_password(body.newPassword, new_salt)
+    updated_accounts: List[Account] = []
+    for acc in ACCOUNTS:
+        if acc.username == account.username:
+            updated_accounts.append(
+                Account(
+                    username=acc.username,
+                    salt=new_salt,
+                    password_hash=new_hash,
+                    role=acc.role,
+                    active=acc.active,
+                )
+            )
+        else:
+            updated_accounts.append(acc)
+
+    _persist_accounts(updated_accounts)
+    invalidate_sessions_for(account.username)
+    return {"message": "密码已更新，请使用新密码重新登录"}
+
+
+class UserPublic(BaseModel):
+    username: str
+    role: Literal["admin", "user"]
+    active: bool
+
+
+class ManageUserCreate(BaseModel):
+    username: str
+    password: str
+    role: Literal["admin", "user"] = "user"
+    active: bool = True
+
+
+class ManageUserToggle(BaseModel):
+    active: bool
+
+
+class ManageUserReset(BaseModel):
+    newPassword: str
+
+
+@app.get("/api/admin/users", response_model=List[UserPublic])
+def list_users(
+    x_admin_session: Optional[str] = Header(None),
+    x_user_session: Optional[str] = Header(None),
+    x_session: Optional[str] = Header(None),
+):
+    require_admin(x_admin_session, x_user_session, x_session)
+    return [UserPublic(username=a.username, role=a.role, active=a.active) for a in ACCOUNTS]
+
+
+@app.post("/api/admin/users", response_model=UserPublic)
+def create_user(
+    body: ManageUserCreate,
+    x_admin_session: Optional[str] = Header(None),
+    x_user_session: Optional[str] = Header(None),
+    x_session: Optional[str] = Header(None),
+):
+    require_admin(x_admin_session, x_user_session, x_session)
+    if get_account(body.username):
+        raise HTTPException(status_code=400, detail="用户名已存在")
+    salt = secrets.token_hex(16)
+    pwd_hash = hash_password(body.password, salt)
+    new_account = Account(
+        username=body.username,
+        salt=salt,
+        password_hash=pwd_hash,
+        role=body.role,
+        active=body.active,
+    )
+    updated = ACCOUNTS + [new_account]
+    _persist_accounts(updated)
+    return UserPublic(username=new_account.username, role=new_account.role, active=new_account.active)
+
+
+@app.post("/api/admin/users/{username}/toggle", response_model=UserPublic)
+def toggle_user(
+    username: str,
+    body: ManageUserToggle,
+    x_admin_session: Optional[str] = Header(None),
+    x_user_session: Optional[str] = Header(None),
+    x_session: Optional[str] = Header(None),
+):
+    require_admin(x_admin_session, x_user_session, x_session)
+    account = get_account(username)
+    if not account:
+        raise HTTPException(status_code=404, detail="用户不存在")
+    if account.role == "admin" and not body.active:
+        # 确保至少一个管理员处于启用状态
+        other_active_admin = any(
+            a.username != username and a.role == "admin" and a.active for a in ACCOUNTS
+        )
+        if not other_active_admin:
+            raise HTTPException(status_code=400, detail="至少需要保留一名启用的管理员")
+
+    updated_accounts: List[Account] = []
+    for acc in ACCOUNTS:
+        if acc.username == username:
+            updated_accounts.append(
+                Account(
+                    username=acc.username,
+                    salt=acc.salt,
+                    password_hash=acc.password_hash,
+                    role=acc.role,
+                    active=body.active,
+                )
+            )
+        else:
+            updated_accounts.append(acc)
+
+    _persist_accounts(updated_accounts)
+    if not body.active:
+        invalidate_sessions_for(username)
+    return UserPublic(username=username, role=account.role, active=body.active)
+
+
+@app.post("/api/admin/users/{username}/reset-password")
+def reset_user_password(
+    username: str,
+    body: ManageUserReset,
+    x_admin_session: Optional[str] = Header(None),
+    x_user_session: Optional[str] = Header(None),
+    x_session: Optional[str] = Header(None),
+):
+    require_admin(x_admin_session, x_user_session, x_session)
+    account = get_account(username)
+    if not account:
+        raise HTTPException(status_code=404, detail="用户不存在")
+    new_salt = secrets.token_hex(16)
+    new_hash = hash_password(body.newPassword, new_salt)
+    updated_accounts: List[Account] = []
+    for acc in ACCOUNTS:
+        if acc.username == username:
+            updated_accounts.append(
+                Account(
+                    username=acc.username,
+                    salt=new_salt,
+                    password_hash=new_hash,
+                    role=acc.role,
+                    active=acc.active,
+                )
+            )
+        else:
+            updated_accounts.append(acc)
+    _persist_accounts(updated_accounts)
+    invalidate_sessions_for(username)
+    return {"message": "密码已重置"}
 
 
 # ====== 报价记录：创建 / 查询 / 统计 ======
@@ -560,9 +730,10 @@ def create_quote_record(
     body: QuoteRecordCreate,
     x_user_session: Optional[str] = Header(None),
     x_admin_session: Optional[str] = Header(None),
+    x_session: Optional[str] = Header(None),
 ):
     """保存一次报价结果，用于后续对账和统计。"""
-    require_authenticated(x_user_session, x_admin_session)
+    require_authenticated(x_user_session, x_admin_session, x_session)
     existing = load_quote_records()
     record = QuoteRecord(
         **body.dict(),
@@ -580,9 +751,11 @@ def list_quote_records(
     pageSize: int = 20,
     month: Optional[str] = None,  # 形如 2024-03
     x_admin_session: Optional[str] = Header(None),
+    x_user_session: Optional[str] = Header(None),
+    x_session: Optional[str] = Header(None),
 ):
     """分页查询报价记录，支持按月份过滤，需管理员登录。"""
-    require_admin(x_admin_session)
+    require_admin(x_admin_session, x_user_session, x_session)
     page = max(page, 1)
     pageSize = min(max(pageSize, 1), 200)
     all_records = load_quote_records()
@@ -612,9 +785,11 @@ def list_quote_records(
 def quote_summary(
     year: Optional[int] = None,
     x_admin_session: Optional[str] = Header(None),
+    x_user_session: Optional[str] = Header(None),
+    x_session: Optional[str] = Header(None),
 ):
     """按月份汇总报价数量与金额。需管理员登录。"""
-    require_admin(x_admin_session)
+    require_admin(x_admin_session, x_user_session, x_session)
     records = load_quote_records()
     summary: Dict[str, Dict[str, float]] = {}
     for r in records:
