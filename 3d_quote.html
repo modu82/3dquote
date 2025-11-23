@@ -41,9 +41,51 @@
       gap: 6px;
       color: #666;
     }
+    .auth-bar {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 10px;
+      background: #0f172a;
+      color: #fff;
+      padding: 10px 12px;
+      border-radius: 12px;
+      margin-bottom: 12px;
+    }
+    .auth-meta {
+      font-size: 13px;
+      color: #e5e7eb;
+    }
+    .auth-actions {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
     .admin-name {
       font-size: 12px;
       color: #555;
+    }
+    .login-panel {
+      background: linear-gradient(135deg, #0b1220, #111827);
+      color: #e5e7eb;
+      padding: 18px;
+      border-radius: 14px;
+      margin-bottom: 16px;
+      box-shadow: inset 0 1px 0 rgba(255,255,255,.05), 0 18px 30px rgba(0,0,0,.12);
+    }
+    .login-panel h3 {
+      margin: 0 0 8px;
+      color: #fff;
+    }
+    .login-panel label { color: #cbd5e1; }
+    .login-row {
+      display: grid;
+      grid-template-columns: 1fr 1fr auto;
+      gap: 10px;
+      align-items: end;
+    }
+    @media (max-width: 640px) {
+      .login-row { grid-template-columns: 1fr; }
     }
     .grid {
       display: grid;
@@ -269,18 +311,90 @@
       width: 100%;
       overflow-x: auto;
     }
+    .page-tabs {
+      display: flex;
+      gap: 10px;
+      margin-bottom: 12px;
+      flex-wrap: wrap;
+    }
+    .page-tab {
+      padding: 8px 14px;
+      border-radius: 999px;
+      border: 1px solid #111827;
+      background: #111827;
+      color: #f8fafc;
+      cursor: pointer;
+      font-size: 13px;
+      transition: background 0.15s ease, color 0.15s ease, border-color 0.15s ease;
+    }
+    .page-tab.active {
+      background: #0070f3;
+      color: #fff;
+      border-color: #0070f3;
+    }
+    .page-tab:hover { background: #1f2937; }
+    .main-section { display: none; }
+    .main-section.active { display: block; }
+    .sub-tabs { margin-bottom: 6px; }
+    .section { display: none; }
+    .section.active { display: block; }
+    .pager {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      font-size: 13px;
+      margin: 6px 0 10px;
+      flex-wrap: wrap;
+    }
+    .pager button { padding: 5px 10px; border-radius: 8px; }
+    .record-card {
+      background: #fafafa;
+      border: 1px solid #eee;
+      border-radius: 12px;
+      padding: 12px;
+      margin-bottom: 10px;
+      font-size: 13px;
+    }
   </style>
 </head>
-<body>
+  <body>
   <div class="container">
-    <!-- 管理员栏 -->
-    <div class="admin-bar">
-      <span class="admin-name" id="adminName"></span>
-      <button type="button" class="mini-btn" id="adminAuthBtn">管理员登录</button>
-    </div>
-
     <h1>通用加工报价计算器</h1>
     <div class="subtitle">根据工艺选择对应材料与设备，快速估算成本与利润</div>
+
+    <div class="auth-bar" id="authBar">
+      <div class="auth-meta" id="userStatus">请先登录后使用报价功能。</div>
+      <div class="auth-actions">
+        <button type="button" class="mini-btn" id="userLogoutBtn" style="display:none;">退出登录</button>
+      </div>
+    </div>
+
+    <div class="login-panel" id="loginPanel">
+      <h3>登录后开始使用</h3>
+      <div class="login-row">
+        <div>
+          <label for="userLoginName">用户名</label>
+          <input id="userLoginName" type="text" placeholder="请输入用户名" />
+        </div>
+        <div>
+          <label for="userLoginPassword">密码</label>
+          <input id="userLoginPassword" type="password" placeholder="请输入密码" />
+        </div>
+        <button type="button" id="userLoginBtn">登录</button>
+      </div>
+      <div class="hint">不同账户对应不同权限：管理员登录后可管理配置、报价记录与用户；普通账号可进行报价计算。</div>
+    </div>
+
+    <div id="appContent" style="display:none;">
+
+    <div class="page-tabs main-tabs">
+      <button class="page-tab active" data-main="quoteMain">报价工作台</button>
+      <button class="page-tab" data-main="recordsMain" style="display:none;">报价记录</button>
+      <button class="page-tab" data-main="adminMain" data-require-admin="true">管理中心</button>
+    </div>
+
+    <div class="main-section active" id="quoteMain">
+    <div class="section active" id="quoteSection">
 
     <!-- 报价表单 -->
     <form id="quote-form">
@@ -301,10 +415,16 @@
           <div class="hint">先选厂商，再选材料型号。材料列表请联系管理员维护。</div>
         </div>
 
-        <div>
+        <div id="weightField">
           <label for="weight">单件耗材重量（g）</label>
           <input id="weight" type="number" step="0.01" min="0" required />
-          <div class="hint">支持到 0.01 g（从切片软件中查看耗材用量）。</div>
+          <div class="hint">当材料按重量计价时填写，支持到 0.01 g（从切片软件中查看耗材用量）。</div>
+        </div>
+
+        <div id="volumeField">
+          <label for="volume">单件材料体积（cm³）</label>
+          <input id="volume" type="number" step="0.01" min="0" />
+          <div class="hint">当材料按体积计价（如木材）时填写；按重量计价时自动隐藏。</div>
         </div>
 
         <!-- 打印时间与设备 -->
@@ -361,6 +481,24 @@
           <input id="customMin" type="number" step="0.1" min="0" placeholder="留空则用默认配置" />
           <div class="hint">用于限制最小单价，防止小零件过低。</div>
         </div>
+
+        <div>
+          <label for="recordVisibilitySelect">报价记录可见范围</label>
+          <select id="recordVisibilitySelect">
+            <option value="admin_only">仅管理员</option>
+            <option value="all_users">全部登录用户</option>
+            <option value="owner_only">仅创建人</option>
+          </select>
+          <div class="hint">影响保存到记录中心的可见性，管理员可后续调整。</div>
+        </div>
+
+        <div>
+          <label for="recordAdoptedFlag">记录状态</label>
+          <div class="time-field">
+            <input id="recordAdoptedFlag" type="checkbox" />
+            <span>标记为“已采用”（仅管理员有效）</span>
+          </div>
+        </div>
       </div>
 
       <div class="actions">
@@ -377,8 +515,69 @@
       <div class="result-detail" id="result-detail"></div>
     </div>
 
+    </div> <!-- /quoteSection -->
+    </div> <!-- /quoteMain -->
+
+    <div class="main-section" id="recordsMain">
+      <div class="section active" id="recordsSection">
+        <h3>报价记录</h3>
+        <small>登录后可按权限查看；管理员可以筛选、修改可见范围或标记采用。</small>
+        <div class="inline-config">
+          <div>
+            <label for="recordsMonth">按月份筛选</label>
+            <input id="recordsMonth" type="month" />
+          </div>
+          <div>
+            <label for="recordsCreatorFilter">创建人</label>
+            <select id="recordsCreatorFilter"></select>
+          </div>
+          <div>
+            <label for="recordsAdoptedFilter">是否采用</label>
+            <select id="recordsAdoptedFilter">
+              <option value="all">全部</option>
+              <option value="true">已采用</option>
+              <option value="false">未采用</option>
+            </select>
+          </div>
+          <div id="recordsVisibilityFilterWrap">
+            <label for="recordsVisibilityFilter">可见范围</label>
+            <select id="recordsVisibilityFilter">
+              <option value="all">全部</option>
+              <option value="admin_only">仅管理员</option>
+              <option value="all_users">全部登录用户</option>
+              <option value="owner_only">仅创建人</option>
+            </select>
+          </div>
+          <div>
+            <label for="recordsPageSize">每页显示</label>
+            <select id="recordsPageSize">
+              <option value="5">5</option>
+              <option value="10">10</option>
+              <option value="20">20</option>
+            </select>
+          </div>
+        </div>
+        <div class="pager">
+          <button type="button" class="mini-btn" id="recordsPrev">上一页</button>
+          <span id="recordsPageInfo"></span>
+          <button type="button" class="mini-btn" id="recordsNext">下一页</button>
+        </div>
+        <div id="recordsList"></div>
+        <h4>月度汇总</h4>
+        <div id="recordsSummary"></div>
+      </div>
+    </div>
+
+    <div class="main-section" id="adminMain" style="display:none;">
+      <div class="page-tabs sub-tabs" id="adminTabs">
+        <button class="page-tab active" data-section="paramsSection">参数配置</button>
+        <button class="page-tab" data-section="materialsSection">材料设置</button>
+        <button class="page-tab" data-section="machinesSection">设备设置</button>
+        <button class="page-tab" data-section="userManagementSection">用户管理</button>
+      </div>
+
     <!-- 管理员设置区域（登录后可见） -->
-    <div class="settings" id="settingsSection" style="display:none;">
+    <div class="settings section admin-sub-section active" id="paramsSection">
       <h3>
         全局参数
         <div>
@@ -448,9 +647,9 @@
         -
         <button id="addPostProcessBtn" class="btn-sub">新增后处理等级</button>
       </h3>
+    </div>
 
-
-
+    <div class="settings section admin-sub-section" id="materialsSection" data-require-admin="true">
       <!-- 材料设置 -->
       <h3 style="display:flex;justify-content:space-between;align-items:center;">
         材料设置
@@ -463,28 +662,40 @@
         <input id="newMaterialVendorInput" type="text" placeholder="新厂商名称" />
         <button type="button" class="mini-btn" id="addMaterialVendorBtn">添加厂商</button>
       </div>
-      <small>单位：元 / kg。这里的内容会同步到上面的材料厂商/型号下拉框。</small>
+      <small>按计价模式填写单价：重量（元/kg）或体积（元/m³），内容会同步到上方下拉框。</small>
       <div class="table-wrapper">
         <table>
           <thead>
             <tr>
-              <th style="width:18%; min-width:140px;">厂商</th>
-              <th style="width:16%; min-width:140px;">工艺</th>
-              <th style="width:32%; min-width:200px;">材料名称</th>
-              <th style="width:20%; min-width:140px;">单价（元 / kg）</th>
+              <th style="width:16%; min-width:120px;">厂商</th>
+              <th style="width:14%; min-width:120px;">工艺</th>
+              <th style="width:26%; min-width:180px;">材料名称</th>
+              <th style="width:14%; min-width:120px;">计价模式</th>
+              <th style="width:18%; min-width:160px;">单价</th>
               <th style="width:12%; min-width:90px;">操作</th>
             </tr>
           </thead>
           <tbody id="materialsTableBody"></tbody>
         </table>
       </div>
+      <div class="pager">
+        <label>每页显示</label>
+        <select id="materialsPageSize">
+          <option value="5">5</option>
+          <option value="10">10</option>
+          <option value="20">20</option>
+        </select>
+        <button type="button" class="mini-btn" id="materialsPrev">上一页</button>
+        <span id="materialsPageInfo"></span>
+        <button type="button" class="mini-btn" id="materialsNext">下一页</button>
+      </div>
       <h3 style="display:flex;justify-content:space-between;align-items:center;">
         -
         <button id="addMaterialBtn" class="btn-sub">新增材料</button>
       </h3>
-              
+    </div>
 
-
+    <div class="settings section admin-sub-section" id="machinesSection" data-require-admin="true">
       <!-- 设备设置 -->
       <h3 style="display:flex;justify-content:space-between;align-items:center;">
         设备设置
@@ -520,11 +731,77 @@
           <tbody id="machinesTableBody"></tbody>
         </table>
       </div>
+      <div class="pager">
+        <label>每页显示</label>
+        <select id="machinesPageSize">
+          <option value="5">5</option>
+          <option value="10">10</option>
+          <option value="20">20</option>
+        </select>
+        <button type="button" class="mini-btn" id="machinesPrev">上一页</button>
+        <span id="machinesPageInfo"></span>
+        <button type="button" class="mini-btn" id="machinesNext">下一页</button>
+      </div>
       <h3 style="display:flex;justify-content:space-between;align-items:center;">
         -
         <button id="addMachineBtn" class="btn-sub">新增设备</button>
       </h3>
     </div>
+
+    <div class="section admin-sub-section" id="userManagementSection">
+      <h3>用户管理</h3>
+      <small>仅管理员可见：新增普通用户或管理员，重置密码、启用/禁用账号，并配置报价记录权限。</small>
+      <div class="inline-config">
+        <div>
+          <label for="newUserName">用户名</label>
+          <input id="newUserName" type="text" placeholder="请输入新用户名" />
+        </div>
+        <div>
+          <label for="newUserPassword">初始密码</label>
+          <input id="newUserPassword" type="password" placeholder="设置初始密码" />
+        </div>
+        <div>
+          <label for="newUserRole">角色</label>
+          <select id="newUserRole">
+            <option value="user">普通用户</option>
+            <option value="admin">管理员</option>
+          </select>
+        </div>
+        <div>
+          <label for="newUserRecordEnabled">是否记录报价</label>
+          <select id="newUserRecordEnabled">
+            <option value="true">记录（默认）</option>
+            <option value="false">不记录</option>
+          </select>
+        </div>
+        <div>
+          <label for="newUserCanViewRecords">是否可查看记录</label>
+          <select id="newUserCanViewRecords">
+            <option value="false">不可查看（默认）</option>
+            <option value="true">允许查看</option>
+          </select>
+        </div>
+        <div style="display:flex;align-items:flex-end;">
+          <button type="button" class="mini-btn" id="createUserBtn">新增用户</button>
+        </div>
+      </div>
+      <div class="table-wrapper">
+        <table>
+          <thead>
+            <tr>
+              <th>用户名</th>
+              <th>角色</th>
+              <th>状态</th>
+              <th>记录开关</th>
+              <th>查看权限</th>
+              <th>操作</th>
+            </tr>
+          </thead>
+          <tbody id="userTableBody"></tbody>
+        </table>
+      </div>
+    </div>
+    </div> <!-- /adminMain -->
   </div>
 
   <script>
@@ -552,16 +829,16 @@
       overheadHourlyPerMachine: 0,    // 杂项成本 元/台·小时
 
       materials: [
-        { vendor: "通用", name: "PLA", pricePerKg: 120, processType: "FDM_3D_PRINT" },
-        { vendor: "通用", name: "PETG", pricePerKg: 150, processType: "FDM_3D_PRINT" },
-        { vendor: "通用", name: "ABS", pricePerKg: 160, processType: "FDM_3D_PRINT" },
-        { vendor: "通用", name: "水洗树脂", pricePerKg: 220, processType: "RESIN_3D_PRINT" },
-        { vendor: "通用", name: "高韧树脂", pricePerKg: 260, processType: "RESIN_3D_PRINT" },
-        { vendor: "通用木料", name: "桦木板", pricePerKg: 35, processType: "CNC_MILLING" },
-        { vendor: "通用木料", name: "樱桃木板", pricePerKg: 65, processType: "CNC_MILLING" },
-        { vendor: "通用石材", name: "人造石板", pricePerKg: 55, processType: "CNC_MILLING" },
-        { vendor: "通用石材", name: "花岗岩毛坯", pricePerKg: 95, processType: "CNC_MILLING" },
-        { vendor: "通用板材", name: "亚克力板", pricePerKg: 45, processType: "CO2_LASER_ENGRAVE_CUT" }
+        { vendor: "通用", name: "PLA", pricePerKg: 120, processType: "FDM_3D_PRINT", pricingMode: "WEIGHT" },
+        { vendor: "通用", name: "PETG", pricePerKg: 150, processType: "FDM_3D_PRINT", pricingMode: "WEIGHT" },
+        { vendor: "通用", name: "ABS", pricePerKg: 160, processType: "FDM_3D_PRINT", pricingMode: "WEIGHT" },
+        { vendor: "通用", name: "水洗树脂", pricePerKg: 220, processType: "RESIN_3D_PRINT", pricingMode: "WEIGHT" },
+        { vendor: "通用", name: "高韧树脂", pricePerKg: 260, processType: "RESIN_3D_PRINT", pricingMode: "WEIGHT" },
+        { vendor: "通用木料", name: "桦木板", pricingMode: "VOLUME", pricePerCubicMeter: 3800, processType: "CNC_MILLING" },
+        { vendor: "通用木料", name: "樱桃木板", pricingMode: "VOLUME", pricePerCubicMeter: 5200, processType: "CNC_MILLING" },
+        { vendor: "通用石材", name: "人造石板", pricePerKg: 55, processType: "CNC_MILLING", pricingMode: "WEIGHT" },
+        { vendor: "通用石材", name: "花岗岩毛坯", pricePerKg: 95, processType: "CNC_MILLING", pricingMode: "WEIGHT" },
+        { vendor: "通用板材", name: "亚克力板", pricePerKg: 45, processType: "CO2_LASER_ENGRAVE_CUT", pricingMode: "WEIGHT" }
       ],
       machines: [
         { vendor: "Bambu Lab", name: "A1/桌面机", hourlyRate: 10, price: null, expectedLifeYears: null, expectedMonthlyHours: null, processType: "FDM_3D_PRINT" },
@@ -580,19 +857,53 @@
     let runtimeConfig = JSON.parse(JSON.stringify(CLIENT_DEFAULTS));
     let lastQuote = null;
 
-    const ADMIN_SESSION_KEY = "quote_admin_session";
-    let adminSessionToken = localStorage.getItem(ADMIN_SESSION_KEY) || null;
+    const SESSION_KEY = "quote_session_token";
+    const MATERIALS_PAGE_SIZE_KEY = "quote_materials_page_size";
+    const MACHINES_PAGE_SIZE_KEY = "quote_machines_page_size";
+    const RECORDS_PAGE_SIZE_KEY = "quote_records_page_size";
+    let cachedUsers = [];
+    let sessionToken = localStorage.getItem(SESSION_KEY) || null;
+    let sessionRole = null;
+    let sessionUsername = "";
+    let isUser = false;
     let isAdmin = false;
-    let adminUsername = "";
+    let canViewRecords = false;
+    let recordSavingEnabled = true;
+    let settingsLoaded = false;
 
     let currentMaterialsVendor = VENDOR_FILTER_ALL;
     let currentMachinesVendor = VENDOR_FILTER_ALL;
     let currentProcessType = PROCESS_TYPES[0].value;
     let currentMaterialsProcessFilter = PROCESS_FILTER_ALL;
     let currentMachinesProcessFilter = PROCESS_FILTER_ALL;
+    let materialsPage = 1;
+    let machinesPage = 1;
+    let materialsPageSize = parseInt(localStorage.getItem(MATERIALS_PAGE_SIZE_KEY) || "10", 10);
+    let machinesPageSize = parseInt(localStorage.getItem(MACHINES_PAGE_SIZE_KEY) || "10", 10);
+    let recordsPage = 1;
+    let recordsPageSize = parseInt(localStorage.getItem(RECORDS_PAGE_SIZE_KEY) || "10", 10);
+    let recordsMaxPage = 1;
+    let recordsCreatorFilter = "";
+    let recordsAdoptedFilter = "all";
+    let recordsVisibilityFilter = "all";
+    let recordVisibilitySelection = "owner_only";
 
     function formatMoney(v) {
       return "¥" + v.toFixed(2);
+    }
+
+    function authHeaders() {
+      const headers = {};
+      if (sessionToken) {
+        headers["X-Session"] = sessionToken;
+        if (isAdmin) headers["X-Admin-Session"] = sessionToken;
+        else headers["X-User-Session"] = sessionToken;
+      }
+      return headers;
+    }
+
+    function isAuthenticated() {
+      return !!sessionToken;
     }
 
     function isProcessMatch(itemProcess, current) {
@@ -675,6 +986,7 @@
         rebuildMaterialOptions();
         rebuildMachineOptions();
         rebuildPostProcessOptions();
+        updateMaterialUsageFields();
       });
     }
 
@@ -685,15 +997,27 @@
       rows.forEach(row => {
         const vendorInput = row.querySelector(".mat-vendor");
         const nameInput = row.querySelector(".mat-name");
-        const priceInput = row.querySelector(".mat-price");
+        const priceWeightInput = row.querySelector(".mat-price-weight");
+        const priceVolumeInput = row.querySelector(".mat-price-volume");
+        const pricingSelect = row.querySelector(".mat-pricing");
         const processSelect = row.querySelector(".mat-process");
         const vendor = (vendorInput.value || "").trim() || "未分类";
         const name = (nameInput.value || "").trim();
-        const price = parseFloat(priceInput.value);
+        const priceWeight = parseFloat(priceWeightInput.value);
+        const priceVolume = parseFloat(priceVolumeInput.value);
+        const pricingMode = pricingSelect?.value === "VOLUME" ? "VOLUME" : "WEIGHT";
         const processType = processSelect?.value || UNIVERSAL_PROCESS_VALUE;
         const normalizedProcess = processType === UNIVERSAL_PROCESS_VALUE ? null : processType;
-        if (name && !isNaN(price) && price >= 0) {
-          arr.push({ vendor, name, pricePerKg: price, processType: normalizedProcess });
+        const validPrice = pricingMode === "VOLUME" ? priceVolume : priceWeight;
+        if (name && !isNaN(validPrice) && validPrice >= 0) {
+          arr.push({
+            vendor,
+            name,
+            pricingMode,
+            pricePerKg: pricingMode === "WEIGHT" ? validPrice : null,
+            pricePerCubicMeter: pricingMode === "VOLUME" ? validPrice : null,
+            processType: normalizedProcess
+          });
         }
       });
       return arr;
@@ -786,7 +1110,14 @@
 
 
     // ===== 材料 / 设备：表格构造 =====
-    function appendMaterialRow(vendor = "", name = "", pricePerKg = "", processType = "FDM_3D_PRINT") {
+    function appendMaterialRow(
+      vendor = "",
+      name = "",
+      pricePerKg = "",
+      processType = "FDM_3D_PRINT",
+      pricingMode = "WEIGHT",
+      pricePerCubicMeter = ""
+    ) {
       const tbody = document.getElementById("materialsTableBody");
       const tr = document.createElement("tr");
       tr.innerHTML = `
@@ -795,22 +1126,54 @@
           <select class="mat-process"></select>
         </td>
         <td><input type="text" class="mat-name" value="${name}"></td>
-        <td><input type="number" class="mat-price" step="0.1" min="0" value="${pricePerKg}"></td>
+        <td>
+          <select class="mat-pricing">
+            <option value="WEIGHT">按重量（元/kg）</option>
+            <option value="VOLUME">按体积（元/m³）</option>
+          </select>
+        </td>
+        <td>
+          <input type="number" class="mat-price-weight" step="0.1" min="0" value="${pricePerKg}">
+          <input type="number" class="mat-price-volume" step="0.1" min="0" value="${pricePerCubicMeter}" style="display:none;" title="元/立方米">
+          <div class="hint mat-price-hint" style="margin-top:4px;">按重量：元/kg</div>
+        </td>
         <td><button type="button" class="mini-btn mat-delete">删</button></td>
       `;
       tbody.appendChild(tr);
 
       renderProcessOptions(tr.querySelector(".mat-process"), processType || UNIVERSAL_PROCESS_VALUE, { includeUniversal: true });
 
+      const pricingSelect = tr.querySelector(".mat-pricing");
+      pricingSelect.value = pricingMode === "VOLUME" ? "VOLUME" : "WEIGHT";
+      function syncMaterialPriceInputs() {
+        const mode = pricingSelect.value;
+        const weightInput = tr.querySelector(".mat-price-weight");
+        const volumeInput = tr.querySelector(".mat-price-volume");
+        const hint = tr.querySelector(".mat-price-hint");
+        if (mode === "VOLUME") {
+          weightInput.style.display = "none";
+          volumeInput.style.display = "inline-block";
+          hint.textContent = "按体积：元/m³";
+        } else {
+          weightInput.style.display = "inline-block";
+          volumeInput.style.display = "none";
+          hint.textContent = "按重量：元/kg";
+        }
+      }
+      syncMaterialPriceInputs();
+      pricingSelect.addEventListener("change", () => syncMaterialPriceInputs());
+
       tr.querySelector(".mat-delete").addEventListener("click", () => {
         tr.remove();
         rebuildMaterialsVendorFilter();
         rebuildMaterialOptions();
+        applyMaterialsPagination();
       });
       tr.querySelectorAll("input, select").forEach(input => {
         input.addEventListener("input", () => {
           rebuildMaterialsVendorFilter();
           rebuildMaterialOptions();
+          applyMaterialsPagination();
         });
       });
     }
@@ -898,6 +1261,7 @@
         tr.remove();
         rebuildMachinesVendorFilter();
         rebuildMachineOptions();
+        applyMachinesPagination();
       });
 
       // “算”按钮（调用我们前面写的计算小时成本函数）
@@ -911,6 +1275,7 @@
           rebuildMachinesVendorFilter();
           rebuildMachineOptions();
           // 注意：这里只刷新 UI，不自动覆盖小时成本，避免你手动改被覆盖
+          applyMachinesPagination();
         });
       });
     }
@@ -978,16 +1343,6 @@
       const allowed = [VENDOR_FILTER_ALL, ...vendors];
       currentMaterialsVendor = allowed.includes(prev) ? prev : VENDOR_FILTER_ALL;
       select.value = currentMaterialsVendor;
-
-      // 只显示当前工艺的行；当厂商为“全部厂商”时显示所有匹配工艺的行
-      rows.forEach(row => {
-        const vInput = row.querySelector(".mat-vendor");
-        const pSelect = row.querySelector(".mat-process");
-        const rowProcess = pSelect?.value || UNIVERSAL_PROCESS_VALUE;
-        const v = (vInput.value || "").trim() || "未分类";
-        const vendorHit = currentMaterialsVendor === VENDOR_FILTER_ALL || v === currentMaterialsVendor;
-        row.style.display = vendorHit && matchesProcessFilter(rowProcess, processFilter) ? "" : "none";
-      });
     }
 
     function rebuildMachinesVendorFilter() {
@@ -1022,36 +1377,103 @@
       const allowed = [VENDOR_FILTER_ALL, ...vendors];
       currentMachinesVendor = allowed.includes(prev) ? prev : VENDOR_FILTER_ALL;
       select.value = currentMachinesVendor;
+    }
 
+    function applyMaterialsPagination() {
+      const rows = Array.from(document.querySelectorAll("#materialsTableBody tr"));
+      const processFilter = document.getElementById("materialsProcessFilter")?.value || PROCESS_FILTER_ALL;
+      const totalMatched = rows.filter(row => {
+        const vInput = row.querySelector(".mat-vendor");
+        const pSelect = row.querySelector(".mat-process");
+        const rowProcess = pSelect?.value || UNIVERSAL_PROCESS_VALUE;
+        const v = (vInput?.value || "").trim() || "未分类";
+        const vendorHit = currentMaterialsVendor === VENDOR_FILTER_ALL || v === currentMaterialsVendor;
+        return vendorHit && matchesProcessFilter(rowProcess, processFilter);
+      }).length;
+      const totalPages = Math.max(1, Math.ceil(totalMatched / materialsPageSize));
+      if (materialsPage > totalPages) materialsPage = totalPages;
+      let currentIndex = 0;
+      rows.forEach(row => {
+        const vInput = row.querySelector(".mat-vendor");
+        const pSelect = row.querySelector(".mat-process");
+        const rowProcess = pSelect?.value || UNIVERSAL_PROCESS_VALUE;
+        const v = (vInput?.value || "").trim() || "未分类";
+        const vendorHit = currentMaterialsVendor === VENDOR_FILTER_ALL || v === currentMaterialsVendor;
+        const match = vendorHit && matchesProcessFilter(rowProcess, processFilter);
+        if (!match) {
+          row.style.display = "none";
+          return;
+        }
+        const pageStart = (materialsPage - 1) * materialsPageSize;
+        const pageEnd = pageStart + materialsPageSize;
+        row.style.display = currentIndex >= pageStart && currentIndex < pageEnd ? "" : "none";
+        currentIndex += 1;
+      });
+      const info = document.getElementById("materialsPageInfo");
+      if (info) info.textContent = `${materialsPage}/${totalPages}（共 ${totalMatched} 条）`;
+      const pageSizeSelect = document.getElementById("materialsPageSize");
+      if (pageSizeSelect) pageSizeSelect.value = materialsPageSize.toString();
+    }
+
+    function applyMachinesPagination() {
+      const rows = Array.from(document.querySelectorAll("#machinesTableBody tr"));
+      const processFilter = document.getElementById("machinesProcessFilter")?.value || PROCESS_FILTER_ALL;
+      const totalMatched = rows.filter(row => {
+        const vInput = row.querySelector(".mac-vendor");
+        const pSelect = row.querySelector(".mac-process");
+        const rowProcess = pSelect?.value || UNIVERSAL_PROCESS_VALUE;
+        const v = (vInput?.value || "").trim() || "未分类";
+        const vendorHit = currentMachinesVendor === VENDOR_FILTER_ALL || v === currentMachinesVendor;
+        return vendorHit && matchesProcessFilter(rowProcess, processFilter);
+      }).length;
+      const totalPages = Math.max(1, Math.ceil(totalMatched / machinesPageSize));
+      if (machinesPage > totalPages) machinesPage = totalPages;
+      let currentIndex = 0;
       rows.forEach(row => {
         const vInput = row.querySelector(".mac-vendor");
         const pSelect = row.querySelector(".mac-process");
         const rowProcess = pSelect?.value || UNIVERSAL_PROCESS_VALUE;
-        const v = (vInput.value || "").trim() || "未分类";
+        const v = (vInput?.value || "").trim() || "未分类";
         const vendorHit = currentMachinesVendor === VENDOR_FILTER_ALL || v === currentMachinesVendor;
-        row.style.display = vendorHit && matchesProcessFilter(rowProcess, processFilter) ? "" : "none";
+        const match = vendorHit && matchesProcessFilter(rowProcess, processFilter);
+        if (!match) {
+          row.style.display = "none";
+          return;
+        }
+        const pageStart = (machinesPage - 1) * machinesPageSize;
+        const pageEnd = pageStart + machinesPageSize;
+        row.style.display = currentIndex >= pageStart && currentIndex < pageEnd ? "" : "none";
+        currentIndex += 1;
       });
+      const info = document.getElementById("machinesPageInfo");
+      if (info) info.textContent = `${machinesPage}/${totalPages}（共 ${totalMatched} 条）`;
+      const pageSizeSelect = document.getElementById("machinesPageSize");
+      if (pageSizeSelect) pageSizeSelect.value = machinesPageSize.toString();
     }
 
     document.getElementById("materialsVendorFilter").addEventListener("change", () => {
       currentMaterialsVendor = document.getElementById("materialsVendorFilter").value;
       rebuildMaterialsVendorFilter();
       rebuildMaterialOptions();
+      applyMaterialsPagination();
     });
     document.getElementById("materialsProcessFilter").addEventListener("change", () => {
       currentMaterialsProcessFilter = document.getElementById("materialsProcessFilter").value;
       rebuildMaterialsVendorFilter();
       rebuildMaterialOptions();
+      applyMaterialsPagination();
     });
     document.getElementById("machinesVendorFilter").addEventListener("change", () => {
       currentMachinesVendor = document.getElementById("machinesVendorFilter").value;
       rebuildMachinesVendorFilter();
       rebuildMachineOptions();
+      applyMachinesPagination();
     });
     document.getElementById("machinesProcessFilter").addEventListener("change", () => {
       currentMachinesProcessFilter = document.getElementById("machinesProcessFilter").value;
       rebuildMachinesVendorFilter();
       rebuildMachineOptions();
+      applyMachinesPagination();
     });
 
     document.getElementById("addMaterialVendorBtn").addEventListener("click", () => {
@@ -1063,7 +1485,7 @@
       input.value = "";
 
       // ⭐ 新增：自动添加一行材料，避免空 vendor 无数据
-      appendMaterialRow(name, "", "", getCurrentProcessType());
+      appendMaterialRow(name, "", "", getCurrentProcessType(), "WEIGHT", "");
 
       rebuildMaterialsVendorFilter();
       rebuildMaterialOptions();
@@ -1083,6 +1505,106 @@
 
       rebuildMachinesVendorFilter();
       rebuildMachineOptions();
+    });
+
+    // 分页控制
+    const materialsPageSizeSelect = document.getElementById("materialsPageSize");
+    materialsPageSizeSelect.value = materialsPageSize.toString();
+    materialsPageSizeSelect.addEventListener("change", () => {
+      materialsPageSize = parseInt(materialsPageSizeSelect.value, 10) || 10;
+      localStorage.setItem(MATERIALS_PAGE_SIZE_KEY, materialsPageSize.toString());
+      materialsPage = 1;
+      applyMaterialsPagination();
+    });
+    document.getElementById("materialsPrev").addEventListener("click", () => {
+      if (materialsPage > 1) {
+        materialsPage -= 1;
+        applyMaterialsPagination();
+      }
+    });
+    document.getElementById("materialsNext").addEventListener("click", () => {
+      materialsPage += 1;
+      applyMaterialsPagination();
+    });
+
+    const machinesPageSizeSelect = document.getElementById("machinesPageSize");
+    machinesPageSizeSelect.value = machinesPageSize.toString();
+    machinesPageSizeSelect.addEventListener("change", () => {
+      machinesPageSize = parseInt(machinesPageSizeSelect.value, 10) || 10;
+      localStorage.setItem(MACHINES_PAGE_SIZE_KEY, machinesPageSize.toString());
+      machinesPage = 1;
+      applyMachinesPagination();
+    });
+    document.getElementById("machinesPrev").addEventListener("click", () => {
+      if (machinesPage > 1) {
+        machinesPage -= 1;
+        applyMachinesPagination();
+      }
+    });
+    document.getElementById("machinesNext").addEventListener("click", () => {
+      machinesPage += 1;
+      applyMachinesPagination();
+    });
+
+    const recordsPageSizeSelect = document.getElementById("recordsPageSize");
+    if (recordsPageSizeSelect) {
+      recordsPageSizeSelect.value = recordsPageSize.toString();
+      recordsPageSizeSelect.addEventListener("change", () => {
+        recordsPageSize = parseInt(recordsPageSizeSelect.value, 10) || 10;
+        localStorage.setItem(RECORDS_PAGE_SIZE_KEY, recordsPageSize.toString());
+        recordsPage = 1;
+        renderQuoteRecords();
+      });
+    }
+    const recordsCreatorSelect = document.getElementById("recordsCreatorFilter");
+    if (recordsCreatorSelect) {
+      recordsCreatorSelect.addEventListener("change", () => {
+        recordsCreatorFilter = recordsCreatorSelect.value;
+        recordsPage = 1;
+        renderQuoteRecords();
+      });
+    }
+    const recordsAdoptedSelect = document.getElementById("recordsAdoptedFilter");
+    if (recordsAdoptedSelect) {
+      recordsAdoptedSelect.value = recordsAdoptedFilter;
+      recordsAdoptedSelect.addEventListener("change", () => {
+        recordsAdoptedFilter = recordsAdoptedSelect.value;
+        recordsPage = 1;
+        renderQuoteRecords();
+      });
+    }
+    const recordsVisibilitySelect = document.getElementById("recordsVisibilityFilter");
+    if (recordsVisibilitySelect) {
+      recordsVisibilitySelect.value = recordsVisibilityFilter;
+      recordsVisibilitySelect.addEventListener("change", () => {
+        recordsVisibilityFilter = recordsVisibilitySelect.value;
+        recordsPage = 1;
+        renderQuoteRecords();
+      });
+    }
+    const recordVisibilitySelect = document.getElementById("recordVisibilitySelect");
+    if (recordVisibilitySelect) {
+      recordVisibilitySelect.value = recordVisibilitySelection;
+      recordVisibilitySelect.addEventListener("change", () => {
+        recordVisibilitySelection = recordVisibilitySelect.value;
+      });
+    }
+    document.getElementById("recordsPrev")?.addEventListener("click", () => {
+      if (recordsPage > 1) {
+        recordsPage -= 1;
+        renderQuoteRecords();
+      }
+    });
+    document.getElementById("recordsNext")?.addEventListener("click", () => {
+      if (recordsPage < recordsMaxPage) {
+        recordsPage += 1;
+        renderQuoteRecords();
+      }
+    });
+    document.getElementById("recordsMonth")?.addEventListener("change", () => {
+      recordsPage = 1;
+      renderQuoteRecords();
+      renderQuoteSummary();
     });
 
 
@@ -1122,6 +1644,43 @@
           matSelect.appendChild(opt);
         }
       });
+
+      if (matSelect.options.length && !matSelect.value) {
+        matSelect.value = matSelect.options[0].value;
+      }
+      updateMaterialUsageFields();
+    }
+
+    function getSelectedMaterial() {
+      const materials = getMaterialsFromTable();
+      const matSelect = document.getElementById("material");
+      const idx = parseInt(matSelect?.value || "", 10);
+      if (isNaN(idx) || idx < 0 || idx >= materials.length) return null;
+      return materials[idx];
+    }
+
+    function updateMaterialUsageFields() {
+      const material = getSelectedMaterial();
+      const pricingMode = material?.pricingMode === "VOLUME" ? "VOLUME" : "WEIGHT";
+      const weightWrap = document.getElementById("weightField");
+      const volumeWrap = document.getElementById("volumeField");
+      const weightInput = document.getElementById("weight");
+      const volumeInput = document.getElementById("volume");
+      if (!weightInput || !volumeInput) return;
+
+      if (pricingMode === "VOLUME") {
+        if (weightWrap) weightWrap.style.display = "none";
+        weightInput.required = false;
+        weightInput.value = "";
+        if (volumeWrap) volumeWrap.style.display = "";
+        volumeInput.required = true;
+      } else {
+        if (weightWrap) weightWrap.style.display = "";
+        weightInput.required = true;
+        if (volumeWrap) volumeWrap.style.display = "none";
+        volumeInput.required = false;
+        volumeInput.value = "";
+      }
     }
 
     function rebuildMachineOptions() {
@@ -1186,6 +1745,7 @@
 
     document.getElementById("materialVendor").addEventListener("change", rebuildMaterialOptions);
     document.getElementById("machineVendor").addEventListener("change", rebuildMachineOptions);
+    document.getElementById("material").addEventListener("change", updateMaterialUsageFields);
 
     function initSettingsFromRuntime() {
       document.getElementById("materialsTableBody").innerHTML = "";
@@ -1198,8 +1758,10 @@
       runtimeConfig.materials.forEach(m => appendMaterialRow(
         m.vendor,
         m.name,
-        m.pricePerKg,
-        m.processType || UNIVERSAL_PROCESS_VALUE
+        m.pricePerKg ?? "",
+        m.processType || UNIVERSAL_PROCESS_VALUE,
+        m.pricingMode || "WEIGHT",
+        m.pricePerCubicMeter ?? ""
       ));
       runtimeConfig.machines.forEach(m => {
         appendMachineRow(
@@ -1232,6 +1794,8 @@
       rebuildMaterialOptions();
       rebuildMachineOptions();
       rebuildPostProcessOptions();
+      applyMaterialsPagination();
+      applyMachinesPagination();
 
       document.getElementById("configProfitMargin").value = (runtimeConfig.defaultProfitMargin * 100).toFixed(0);
       document.getElementById("configMinPrice").value = runtimeConfig.defaultMinPricePerPart.toString();
@@ -1245,7 +1809,8 @@
 
     async function loadSettingsFromServer() {
       try {
-        const resp = await fetch(`${API_BASE}/settings`);
+        if (!isAuthenticated()) throw new Error("未登录");
+        const resp = await fetch(`${API_BASE}/settings`, { headers: authHeaders() });
         if (!resp.ok) throw new Error("HTTP " + resp.status);
         const data = await resp.json();
         runtimeConfig.defaultProfitMargin = data.defaultProfitMargin;
@@ -1274,64 +1839,563 @@
       } catch (e) {
         console.warn("加载服务器设置失败，使用前端默认值:", e);
       }
+      settingsLoaded = true;
       initSettingsFromRuntime();
     }
 
-    // ===== 管理员登录 / 状态 =====
-    function updateAdminUI() {
-      const settingsSection = document.getElementById("settingsSection");
-      const adminBtn = document.getElementById("adminAuthBtn");
-      const adminNameSpan = document.getElementById("adminName");
-
-      if (isAdmin) {
-        settingsSection.style.display = "";
-        adminBtn.textContent = "退出登录";
-        adminNameSpan.textContent = adminUsername ? `已登录：${adminUsername}` : "已登录";
-      } else {
-        settingsSection.style.display = "none";
-        adminBtn.textContent = "管理员登录";
-        adminNameSpan.textContent = "";
+    // ===== 登录 / 权限控制 =====
+    function setMainTab(btn) {
+      if (!btn) return;
+      document.querySelectorAll(".main-tabs .page-tab").forEach(b => b.classList.remove("active"));
+      document.querySelectorAll(".main-section").forEach(sec => sec.classList.remove("active"));
+      btn.classList.add("active");
+      const id = btn.getAttribute("data-main");
+      const target = document.getElementById(id);
+      if (target) target.classList.add("active");
+      if (id === "adminMain") {
+        const firstAdminTab = document.querySelector('#adminTabs .page-tab');
+        setAdminSubTab(firstAdminTab);
+      }
+      if (id === "recordsMain") {
+        renderQuoteRecords();
+        if (isAdmin) renderQuoteSummary();
       }
     }
 
-    async function checkAdminStatus() {
-      if (!adminSessionToken) {
+    function setAdminSubTab(btn) {
+      if (!btn) return;
+      document.querySelectorAll("#adminTabs .page-tab").forEach(b => b.classList.remove("active"));
+      document.querySelectorAll(".admin-sub-section").forEach(sec => sec.classList.remove("active"));
+      btn.classList.add("active");
+      const id = btn.getAttribute("data-section");
+      const target = document.getElementById(id);
+      if (target) target.classList.add("active");
+    }
+
+    function updateAuthUI() {
+      const loginPanel = document.getElementById("loginPanel");
+      const appContent = document.getElementById("appContent");
+      const statusEl = document.getElementById("userStatus");
+      const logoutBtn = document.getElementById("userLogoutBtn");
+      const adminTab = document.querySelector('.main-tabs .page-tab[data-main="adminMain"]');
+      const adminMain = document.getElementById("adminMain");
+      const recordsTab = document.querySelector('.main-tabs .page-tab[data-main="recordsMain"]');
+      const recordsMain = document.getElementById("recordsMain");
+      const recordAdopted = document.getElementById("recordAdoptedFlag");
+      const recordVisibilitySelect = document.getElementById("recordVisibilitySelect");
+      const recordVisibilityWrap = recordVisibilitySelect?.closest("div");
+      const recordsVisibilityFilterWrap = document.getElementById("recordsVisibilityFilterWrap");
+      const recordsVisibilitySelect = document.getElementById("recordsVisibilityFilter");
+
+      const authed = isAuthenticated();
+      if (loginPanel) loginPanel.style.display = authed ? "none" : "";
+      if (appContent) appContent.style.display = authed ? "" : "none";
+      if (logoutBtn) logoutBtn.style.display = authed ? "" : "none";
+
+      if (statusEl) {
+        if (isAdmin) statusEl.textContent = `管理员已登录：${sessionUsername || ""}`;
+        else if (isUser) statusEl.textContent = `已登录用户：${sessionUsername || ""}`;
+        else statusEl.textContent = "请先登录后使用报价功能。";
+      }
+
+      if (adminTab) adminTab.style.display = isAdmin ? "" : "none";
+      const canSeeRecordsTab = authed && (isAdmin || canViewRecords);
+      if (recordsTab) recordsTab.style.display = canSeeRecordsTab ? "" : "none";
+      if (!isAdmin && adminTab?.classList.contains("active")) {
+        setMainTab(document.querySelector('.main-tabs .page-tab[data-main="quoteMain"]'));
+      }
+      if ((!authed || !canSeeRecordsTab) && recordsTab?.classList.contains("active")) {
+        setMainTab(document.querySelector('.main-tabs .page-tab[data-main="quoteMain"]'));
+      }
+      if (adminMain) {
+        adminMain.style.display = isAdmin ? "" : "none";
+      }
+      if (recordsMain) {
+        recordsMain.style.display = canSeeRecordsTab ? "" : "none";
+      }
+
+      if (recordAdopted) {
+        recordAdopted.checked = false;
+        recordAdopted.disabled = !isAdmin;
+      }
+      if (recordVisibilitySelect) {
+        recordVisibilitySelection = isAdmin ? recordVisibilitySelection : "owner_only";
+        recordVisibilitySelect.value = recordVisibilitySelection;
+        recordVisibilitySelect.disabled = !isAdmin;
+        if (recordVisibilityWrap) recordVisibilityWrap.style.display = isAdmin ? "" : "none";
+      }
+      if (recordsVisibilityFilterWrap) {
+        if (!isAdmin) recordsVisibilityFilter = "all";
+        recordsVisibilityFilterWrap.style.display = isAdmin ? "" : "none";
+        if (recordsVisibilitySelect) recordsVisibilitySelect.value = recordsVisibilityFilter;
+      }
+      if (authed && (isAdmin || canViewRecords)) {
+        populateRecordCreatorsOptions(isAdmin ? cachedUsers : []);
+      }
+      const activeAdminTab = document.querySelector('#adminTabs .page-tab.active');
+      if (isAdmin && activeAdminTab) {
+        const targetId = activeAdminTab.getAttribute("data-section");
+        if (targetId === "recordsSection") {
+          renderQuoteRecords();
+          renderQuoteSummary();
+        }
+      }
+    }
+
+    async function refreshAuthState(forceReload = false) {
+      if (!sessionToken) {
         isAdmin = false;
-        adminUsername = "";
-        updateAdminUI();
+        isUser = false;
+        sessionRole = null;
+        sessionUsername = "";
+        canViewRecords = false;
+        recordSavingEnabled = true;
+        updateAuthUI();
         return;
       }
       try {
-        const resp = await fetch(`${API_BASE}/admin/status`, {
-          headers: { "X-Admin-Session": adminSessionToken }
-        });
+        const resp = await fetch(`${API_BASE}/auth/status`, { headers: authHeaders() });
         if (!resp.ok) throw new Error("HTTP " + resp.status);
         const data = await resp.json();
         if (data.authenticated) {
-          isAdmin = true;
-          adminUsername = data.username || "";
+          sessionRole = data.role;
+          sessionUsername = data.username || "";
+          isAdmin = sessionRole === "admin";
+          isUser = sessionRole === "user" || sessionRole === "admin";
+          canViewRecords = !!data.canViewRecords || isAdmin;
+          recordSavingEnabled = data.recordEnabled !== false;
         } else {
+          sessionToken = null;
+          sessionRole = null;
+          sessionUsername = "";
+          localStorage.removeItem(SESSION_KEY);
           isAdmin = false;
-          adminUsername = "";
-          adminSessionToken = null;
-          localStorage.removeItem(ADMIN_SESSION_KEY);
+          isUser = false;
+          canViewRecords = false;
+          recordSavingEnabled = true;
         }
       } catch (e) {
-        console.warn("检查管理员状态失败:", e);
+        console.warn("检查登录状态失败:", e);
+        sessionToken = null;
+        sessionRole = null;
+        sessionUsername = "";
+        localStorage.removeItem(SESSION_KEY);
         isAdmin = false;
-        adminUsername = "";
+        isUser = false;
+        canViewRecords = false;
+        recordSavingEnabled = true;
       }
-      updateAdminUI();
+
+      updateAuthUI();
+      if (isAuthenticated() && (forceReload || !settingsLoaded)) {
+        await loadSettingsFromServer();
+      }
+      if (isAuthenticated()) {
+        renderQuoteRecords();
+      }
+      if (isAdmin) {
+        renderQuoteSummary();
+        renderUserTable();
+      }
     }
 
-    async function adminLoginFlow() {
-      const username = window.prompt("请输入管理员用户名：", "admin");
-      if (!username) return;
-      const password = window.prompt("请输入管理员密码：");
-      if (!password) return;
+    async function fetchQuoteRecords() {
+      const month = document.getElementById("recordsMonth")?.value || "";
+      const params = new URLSearchParams({ page: String(recordsPage), pageSize: String(recordsPageSize) });
+      if (month) params.append("month", month);
+      if (recordsCreatorFilter) params.append("creator", recordsCreatorFilter);
+      if (recordsAdoptedFilter !== "all") params.append("adopted", recordsAdoptedFilter === "true");
+      if (isAdmin && recordsVisibilityFilter !== "all") params.append("visibility", recordsVisibilityFilter);
+      const resp = await fetch(`${API_BASE}/quotes?${params.toString()}`, {
+        headers: authHeaders()
+      });
+      if (!resp.ok) throw new Error("无法获取报价记录，请确认已登录并具备查看权限");
+      return resp.json();
+    }
+
+    async function fetchQuoteSummary() {
+      const now = new Date();
+      const resp = await fetch(`${API_BASE}/quotes/summary?year=${now.getFullYear()}`, {
+        headers: authHeaders()
+      });
+      if (!resp.ok) throw new Error("无法获取汇总，请确认已登录管理员");
+      return resp.json();
+    }
+
+    async function updateQuoteRecord(id, payload) {
+      const resp = await fetch(`${API_BASE}/quotes/${id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json", ...authHeaders() },
+        body: JSON.stringify(payload)
+      });
+      const data = await resp.json().catch(() => ({}));
+      if (!resp.ok) throw new Error(data.detail || "更新失败");
+      return data;
+    }
+
+    async function deleteQuoteRecord(id) {
+      const resp = await fetch(`${API_BASE}/quotes/${id}`, {
+        method: "DELETE",
+        headers: authHeaders()
+      });
+      const data = await resp.json().catch(() => ({}));
+      if (!resp.ok) throw new Error(data.detail || "删除失败");
+      return data;
+    }
+
+    async function renderQuoteRecords() {
+      const listEl = document.getElementById("recordsList");
+      const infoEl = document.getElementById("recordsPageInfo");
+      const prevBtn = document.getElementById("recordsPrev");
+      const nextBtn = document.getElementById("recordsNext");
+      if (!listEl) return;
+      if (!isAdmin && !canViewRecords) {
+        listEl.textContent = "当前账号无查看报价记录的权限，请联系管理员开启。";
+        if (infoEl) infoEl.textContent = "";
+        if (prevBtn) prevBtn.disabled = true;
+        if (nextBtn) nextBtn.disabled = true;
+        return;
+      }
+      listEl.textContent = "加载中...";
+      try {
+        const data = await fetchQuoteRecords();
+        recordsPage = data.page || recordsPage;
+        recordsMaxPage = Math.max(1, Math.ceil((data.total || 0) / (data.pageSize || recordsPageSize || 1)));
+        if (recordsPage > recordsMaxPage) {
+          recordsPage = recordsMaxPage;
+          renderQuoteRecords();
+          return;
+        }
+        listEl.innerHTML = "";
+        if (Array.isArray(data.items) && data.items.length) {
+          const visibilityLabels = {
+            admin_only: "仅管理员",
+            all_users: "全部登录用户",
+            owner_only: "仅创建人",
+          };
+          data.items.forEach(item => {
+            const div = document.createElement("div");
+            div.className = "record-card";
+            const createdLabel = item.createdBy ? `创建人：${item.createdBy}` : "创建人：-";
+            const visibilityLabel = visibilityLabels[item.visibility] || "未指定";
+            const adoptedLabel = item.adopted ? "已采用" : "未采用";
+            div.innerHTML = `
+              <div><strong>${item.processLabel || item.processType}</strong> · ${new Date(item.createdAt).toLocaleString()}</div>
+              <div>${createdLabel} · 可见：${visibilityLabel} · 状态：${adoptedLabel}</div>
+              <div>材料：${item.material?.vendor || ''} / ${item.material?.name || ''}</div>
+              <div>单价：${formatMoney(item.finalPricePerPart)} × 数量 ${item.quantity} = ${formatMoney(item.totalPrice)}</div>
+            `;
+
+            if (isAdmin) {
+              const actions = document.createElement("div");
+              actions.className = "pager";
+
+              const adoptBtn = document.createElement("button");
+              adoptBtn.type = "button";
+              adoptBtn.className = "mini-btn";
+              adoptBtn.textContent = item.adopted ? "标记未采用" : "标记已采用";
+              adoptBtn.addEventListener("click", async () => {
+                await updateQuoteRecord(item.id, { adopted: !item.adopted });
+                renderQuoteRecords();
+              });
+
+              const visibilitySelect = document.createElement("select");
+              [
+                { value: "admin_only", label: "仅管理员" },
+                { value: "all_users", label: "全部登录用户" },
+                { value: "owner_only", label: "仅创建人" },
+              ].forEach(opt => {
+                const option = document.createElement("option");
+                option.value = opt.value;
+                option.textContent = opt.label;
+                visibilitySelect.appendChild(option);
+              });
+              visibilitySelect.value = item.visibility || "admin_only";
+              visibilitySelect.addEventListener("change", async () => {
+                await updateQuoteRecord(item.id, { visibility: visibilitySelect.value });
+                renderQuoteRecords();
+              });
+
+              const delBtn = document.createElement("button");
+              delBtn.type = "button";
+              delBtn.className = "mini-btn";
+              delBtn.textContent = "删除";
+              delBtn.addEventListener("click", async () => {
+                if (window.confirm("确定删除该记录吗？")) {
+                  await deleteQuoteRecord(item.id);
+                  renderQuoteRecords();
+                  renderQuoteSummary();
+                }
+              });
+
+              actions.append("状态：", adoptBtn, " 可见范围：", visibilitySelect, delBtn);
+              div.appendChild(actions);
+            }
+
+            listEl.appendChild(div);
+          });
+        } else {
+          listEl.textContent = "暂无记录";
+        }
+        if (infoEl) infoEl.textContent = `${recordsPage}/${recordsMaxPage}（共 ${data.total || 0} 条）`;
+        if (prevBtn) prevBtn.disabled = recordsPage <= 1;
+        if (nextBtn) nextBtn.disabled = recordsPage >= recordsMaxPage;
+      } catch (e) {
+        listEl.textContent = e.message || "获取记录失败";
+        if (infoEl) infoEl.textContent = "";
+      }
+    }
+
+    async function renderQuoteSummary() {
+      const summaryEl = document.getElementById("recordsSummary");
+      if (!summaryEl) return;
+      if (!isAdmin) {
+        summaryEl.textContent = "仅管理员可查看月度汇总";
+        return;
+      }
+      summaryEl.textContent = "加载中...";
+      try {
+        const data = await fetchQuoteSummary();
+        if (Array.isArray(data.items) && data.items.length) {
+          const lines = data.items.map(item => `${item.month}: ${item.count} 单 · ${formatMoney(item.amount)}`);
+          summaryEl.innerHTML = lines.join("<br>");
+        } else {
+          summaryEl.textContent = "暂无数据";
+        }
+      } catch (e) {
+        summaryEl.textContent = e.message || "获取汇总失败";
+      }
+    }
+
+    async function fetchUsers() {
+      const resp = await fetch(`${API_BASE}/admin/users`, { headers: authHeaders() });
+      if (!resp.ok) throw new Error("无法获取用户列表，请确认已登录管理员");
+      return resp.json();
+    }
+
+    function getCachedUser(username) {
+      return Array.isArray(cachedUsers) ? cachedUsers.find(u => u.username === username) : null;
+    }
+
+    function populateRecordCreatorsOptions(users = []) {
+      const select = document.getElementById("recordsCreatorFilter");
+      if (!select) return;
+      const prev = select.value;
+      select.innerHTML = "";
+      const allOpt = document.createElement("option");
+      allOpt.value = "";
+      allOpt.textContent = "全部";
+      select.appendChild(allOpt);
+      if (sessionUsername) {
+        const selfOpt = document.createElement("option");
+        selfOpt.value = sessionUsername;
+        selfOpt.textContent = `仅自己 (${sessionUsername})`;
+        select.appendChild(selfOpt);
+      }
+      if (Array.isArray(users) && users.length) {
+        users.forEach(u => {
+          const opt = document.createElement("option");
+          opt.value = u.username;
+          opt.textContent = `${u.username}（${u.role === "admin" ? "管理员" : "用户"}）`;
+          select.appendChild(opt);
+        });
+      }
+      const allowed = Array.from(select.options).map(o => o.value);
+      select.value = allowed.includes(prev) ? prev : "";
+    }
+
+    async function renderUserTable() {
+      if (!isAdmin) return;
+      const tbody = document.getElementById("userTableBody");
+      if (!tbody) return;
+      tbody.innerHTML = "<tr><td colspan='6'>加载中...</td></tr>";
+      try {
+        const users = await fetchUsers();
+        cachedUsers = users;
+        populateRecordCreatorsOptions(users);
+        if (!Array.isArray(users) || users.length === 0) {
+          tbody.innerHTML = "<tr><td colspan='6'>暂无用户</td></tr>";
+          return;
+        }
+        tbody.innerHTML = "";
+        users.forEach(user => {
+          const tr = document.createElement("tr");
+          tr.innerHTML = `
+            <td>${user.username}</td>
+            <td>${user.role === "admin" ? "管理员" : "普通用户"}</td>
+            <td>${user.active ? "启用" : "禁用"}</td>
+            <td>
+              <span class="badge">${user.recordEnabled ? "记录中" : "不记录"}</span>
+              <button type="button" class="mini-btn" data-action="record" data-username="${user.username}" data-enabled="${user.recordEnabled}">${user.recordEnabled ? "暂停记录" : "开启记录"}</button>
+            </td>
+            <td>
+              <span class="badge">${user.canViewRecords ? "可查看" : "不可查看"}</span>
+              <button type="button" class="mini-btn" data-action="view" data-username="${user.username}" data-view="${user.canViewRecords}">${user.canViewRecords ? "收回权限" : "允许查看"}</button>
+            </td>
+            <td>
+              <button type="button" class="mini-btn" data-action="reset" data-username="${user.username}">重置密码</button>
+              <button type="button" class="mini-btn" data-action="edit" data-username="${user.username}" data-role="${user.role}">编辑</button>
+              <button type="button" class="mini-btn" data-action="toggle" data-username="${user.username}" data-active="${user.active}">
+                ${user.active ? "禁用" : "启用"}
+              </button>
+              <button type="button" class="mini-btn" data-action="delete" data-username="${user.username}">删除</button>
+            </td>
+          `;
+          tbody.appendChild(tr);
+        });
+      } catch (e) {
+        tbody.innerHTML = `<tr><td colspan='6'>${e.message || "加载失败"}</td></tr>`;
+      }
+    }
+
+    async function createUser() {
+      const name = document.getElementById("newUserName").value.trim();
+      const pwd = document.getElementById("newUserPassword").value;
+      const role = document.getElementById("newUserRole").value;
+      const recordFlag = document.getElementById("newUserRecordEnabled").value === "true";
+      const viewFlag = document.getElementById("newUserCanViewRecords").value === "true";
+      if (!name || !pwd) {
+        alert("请输入用户名和初始密码");
+        return;
+      }
+      try {
+        const resp = await fetch(`${API_BASE}/admin/users`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json", ...authHeaders() },
+          body: JSON.stringify({ username: name, password: pwd, role, active: true, recordEnabled: recordFlag, canViewRecords: viewFlag })
+        });
+        const data = await resp.json().catch(() => ({}));
+        if (!resp.ok) throw new Error(data.detail || "创建失败");
+        document.getElementById("newUserName").value = "";
+        document.getElementById("newUserPassword").value = "";
+        document.getElementById("newUserRole").value = "user";
+        document.getElementById("newUserRecordEnabled").value = "true";
+        document.getElementById("newUserCanViewRecords").value = "false";
+        await renderUserTable();
+        alert("用户已创建");
+      } catch (e) {
+        alert(e.message || "创建失败");
+      }
+    }
+
+    async function toggleUser(username, active) {
+      try {
+        const resp = await fetch(`${API_BASE}/admin/users/${encodeURIComponent(username)}/toggle`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json", ...authHeaders() },
+          body: JSON.stringify({ active })
+        });
+        const data = await resp.json().catch(() => ({}));
+        if (!resp.ok) throw new Error(data.detail || "操作失败");
+        await renderUserTable();
+      } catch (e) {
+        alert(e.message || "操作失败");
+      }
+    }
+
+    async function resetUserPassword(username) {
+      const newPwd = window.prompt(`请输入为 ${username} 设置的新密码：`);
+      if (!newPwd) return;
+      try {
+        const resp = await fetch(`${API_BASE}/admin/users/${encodeURIComponent(username)}/reset-password`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json", ...authHeaders() },
+          body: JSON.stringify({ newPassword: newPwd })
+        });
+        const data = await resp.json().catch(() => ({}));
+        if (!resp.ok) throw new Error(data.detail || "重置失败");
+        alert("密码已重置");
+      } catch (e) {
+        alert(e.message || "重置失败");
+      }
+    }
+
+    async function updateUser(username, newUsername, newRole, extraPayload = {}) {
+      if (!newUsername) newUsername = username;
+      if (newRole !== "admin" && newRole !== "user") {
+        alert("角色只能为 admin 或 user");
+        return;
+      }
+      try {
+        const resp = await fetch(`${API_BASE}/admin/users/${encodeURIComponent(username)}`, {
+          method: "PUT",
+          headers: { "Content-Type": "application/json", ...authHeaders() },
+          body: JSON.stringify({ newUsername, role: newRole, ...extraPayload })
+        });
+        const data = await resp.json().catch(() => ({}));
+        if (!resp.ok) throw new Error(data.detail || "更新失败");
+        await renderUserTable();
+        alert("用户信息已更新");
+      } catch (e) {
+        alert(e.message || "更新失败");
+      }
+    }
+
+    async function deleteUser(username) {
+      try {
+        const resp = await fetch(`${API_BASE}/admin/users/${encodeURIComponent(username)}`, {
+          method: "DELETE",
+          headers: authHeaders()
+        });
+        const data = await resp.json().catch(() => ({}));
+        if (!resp.ok) throw new Error(data.detail || "删除失败");
+        await renderUserTable();
+      } catch (e) {
+        alert(e.message || "删除失败");
+      }
+    }
+
+    async function persistQuoteResult(quote) {
+      if (!recordSavingEnabled) return;
+      try {
+        const recordVisibility = isAdmin
+          ? (document.getElementById("recordVisibilitySelect")?.value || "admin_only")
+          : "owner_only";
+        const recordAdopted = isAdmin && document.getElementById("recordAdoptedFlag")?.checked ? true : false;
+        await fetch(`${API_BASE}/quotes`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json", ...authHeaders() },
+          body: JSON.stringify({
+            processType: quote.processType,
+            processLabel: quote.processLabel,
+            quantity: quote.quantity,
+            totalPrice: quote.totalPrice,
+            finalPricePerPart: quote.finalPricePerPart,
+            costSumPerPart: quote.costSumPerPart,
+            profitMargin: quote.profitMargin,
+            materialCostPerPart: quote.materialCostPerPart,
+            machineCostPerPart: quote.machineCostPerPart,
+            postCostPerPart: quote.postCostPerPart,
+            setupCostPerPart: quote.setupCostPerPart,
+            material: quote.material,
+            machine: quote.machine,
+            postProcess: quote.post,
+            weight: quote.weight,
+            volume: quote.volume,
+            totalHours: quote.totalHours,
+            visibility: recordVisibility,
+            adopted: recordAdopted
+          })
+        });
+        if (isAdmin) {
+          renderQuoteRecords();
+          renderQuoteSummary();
+        }
+      } catch (e) {
+        console.warn("保存报价记录失败", e);
+      }
+    }
+
+    async function userLoginFlow() {
+      const username = document.getElementById("userLoginName").value.trim();
+      const password = document.getElementById("userLoginPassword").value;
+      if (!username || !password) {
+        alert("请输入用户名和密码");
+        return;
+      }
 
       try {
-        const resp = await fetch(`${API_BASE}/admin/login`, {
+        const resp = await fetch(`${API_BASE}/auth/login`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ username, password })
@@ -1341,50 +2405,48 @@
           throw new Error(err.detail || "登录失败");
         }
         const data = await resp.json();
-        adminSessionToken = data.token;
-        adminUsername = data.username;
-        isAdmin = true;
-        localStorage.setItem(ADMIN_SESSION_KEY, adminSessionToken);
-        updateAdminUI();
-        alert("登录成功");
+        sessionToken = data.token;
+        sessionUsername = data.username;
+        sessionRole = data.role;
+        isAdmin = sessionRole === "admin";
+        isUser = sessionRole === "user" || sessionRole === "admin";
+        canViewRecords = !!data.canViewRecords || isAdmin;
+        recordSavingEnabled = data.recordEnabled !== false;
+        localStorage.setItem(SESSION_KEY, sessionToken);
+        await refreshAuthState(true);
+        alert(`登录成功，当前角色：${sessionRole === "admin" ? "管理员" : "普通用户"}`);
       } catch (e) {
         alert("登录失败：" + e.message);
       }
     }
 
-    async function adminLogoutFlow() {
-      if (!adminSessionToken) {
-        isAdmin = false;
-        adminUsername = "";
-        updateAdminUI();
-        return;
+    async function logoutFlow() {
+      if (sessionToken) {
+        try {
+          await fetch(`${API_BASE}/auth/logout`, {
+            method: "POST",
+            headers: { ...authHeaders() },
+          });
+        } catch (e) {
+          console.warn("登出失败：", e);
+        }
       }
-      try {
-        await fetch(`${API_BASE}/admin/logout`, {
-          method: "POST",
-          headers: { "X-Admin-Session": adminSessionToken }
-        });
-      } catch (e) {
-        console.warn("登出请求失败：", e);
-      }
-      adminSessionToken = null;
+      sessionToken = null;
+      sessionRole = null;
+      sessionUsername = "";
+      isUser = false;
       isAdmin = false;
-      adminUsername = "";
-      localStorage.removeItem(ADMIN_SESSION_KEY);
-      updateAdminUI();
+      localStorage.removeItem(SESSION_KEY);
+      settingsLoaded = false;
+      updateAuthUI();
     }
 
-    document.getElementById("adminAuthBtn").addEventListener("click", () => {
-      if (isAdmin) {
-        adminLogoutFlow();
-      } else {
-        adminLoginFlow();
-      }
-    });
+    document.getElementById("userLoginBtn").addEventListener("click", userLoginFlow);
+    document.getElementById("userLogoutBtn").addEventListener("click", logoutFlow);
 
     // ===== 保存设置 & 修改密码 =====
     async function saveSettingsToServer() {
-      if (!isAdmin || !adminSessionToken) {
+      if (!isAdmin || !sessionToken) {
         alert("请先以管理员身份登录。");
         return;
       }
@@ -1472,18 +2534,17 @@
       try {
         const resp = await fetch(`${API_BASE}/settings`, {
           method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            "X-Admin-Session": adminSessionToken
-          },
+          headers: { "Content-Type": "application/json", ...authHeaders() },
           body: JSON.stringify(payload)
         });
         if (resp.status === 401) {
           isAdmin = false;
-          adminUsername = "";
-          adminSessionToken = null;
-          localStorage.removeItem(ADMIN_SESSION_KEY);
-          updateAdminUI();
+          isUser = false;
+          sessionUsername = "";
+          sessionRole = null;
+          sessionToken = null;
+          localStorage.removeItem(SESSION_KEY);
+          updateAuthUI();
           throw new Error("未登录或会话已过期，请重新登录。");
         }
         if (!resp.ok) {
@@ -1505,7 +2566,7 @@
     }
 
     async function changeAdminPassword() {
-      if (!isAdmin || !adminSessionToken) {
+      if (!isAdmin || !sessionToken) {
         alert("请先以管理员身份登录。");
         return;
       }
@@ -1517,10 +2578,7 @@
       try {
         const resp = await fetch(`${API_BASE}/admin/change-password`, {
           method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            "X-Admin-Session": adminSessionToken
-          },
+          headers: { "Content-Type": "application/json", ...authHeaders() },
           body: JSON.stringify({ oldPassword: oldPwd, newPassword: newPwd })
         });
         const data = await resp.json().catch(() => ({}));
@@ -1528,11 +2586,13 @@
           throw new Error(data.detail || "修改失败");
         }
         alert("密码已更新，请使用新密码重新登录。");
-        adminSessionToken = null;
+        sessionToken = null;
+        sessionRole = null;
+        sessionUsername = "";
         isAdmin = false;
-        adminUsername = "";
-        localStorage.removeItem(ADMIN_SESSION_KEY);
-        updateAdminUI();
+        isUser = false;
+        localStorage.removeItem(SESSION_KEY);
+        updateAuthUI();
       } catch (e) {
         alert("修改密码失败：" + e.message);
       }
@@ -1542,7 +2602,7 @@
     document.getElementById("changePasswordBtn").addEventListener("click", changeAdminPassword);
     document.getElementById("addMaterialBtn").addEventListener("click", () => {
       const vendor = currentMaterialsVendor || "未分类";
-      appendMaterialRow(vendor, "", "", getCurrentProcessType());
+      appendMaterialRow(vendor, "", "", getCurrentProcessType(), "WEIGHT", "");
       rebuildMaterialsVendorFilter();
       rebuildMaterialOptions();
     });
@@ -1557,9 +2617,45 @@
       rebuildPostProcessOptions();
     });
 
+    document.getElementById("createUserBtn").addEventListener("click", createUser);
+    document.getElementById("userTableBody").addEventListener("click", (e) => {
+      const btn = e.target.closest("button[data-action]");
+      if (!btn) return;
+      const username = btn.getAttribute("data-username");
+      const action = btn.getAttribute("data-action");
+      if (action === "reset") {
+        resetUserPassword(username);
+      } else if (action === "toggle") {
+        const active = btn.getAttribute("data-active") === "true";
+        toggleUser(username, !active);
+      } else if (action === "edit") {
+        const currentRole = btn.getAttribute("data-role") || "user";
+        const newName = window.prompt("请输入新的用户名（留空则不修改）：", username) || username;
+        const newRole = window.prompt("请输入角色 admin/user：", currentRole) || currentRole;
+        updateUser(username, newName.trim(), newRole.trim());
+      } else if (action === "record") {
+        const user = getCachedUser(username);
+        if (!user) return;
+        updateUser(username, user.username, user.role, { recordEnabled: !user.recordEnabled });
+      } else if (action === "view") {
+        const user = getCachedUser(username);
+        if (!user) return;
+        updateUser(username, user.username, user.role, { canViewRecords: !user.canViewRecords });
+      } else if (action === "delete") {
+        if (window.confirm(`确定要删除用户 ${username} 吗？`)) {
+          deleteUser(username);
+        }
+      }
+    });
+
     // ===== 报价计算 & 导出 =====
     document.getElementById("quote-form").addEventListener("submit", function (e) {
       e.preventDefault();
+
+      if (!isAuthenticated()) {
+        alert("请先登录后再计算报价。");
+        return;
+      }
 
       const materials = getMaterialsFromTable();
       const machines = getMachinesFromTable();
@@ -1589,6 +2685,15 @@
       }
 
       const weight = parseFloat(document.getElementById("weight").value) || 0;
+      const volume = parseFloat(document.getElementById("volume").value) || 0;
+      if (material.pricingMode === "VOLUME" && volume <= 0) {
+        alert("当前材料按体积计价，请填写有效的体积。");
+        return;
+      }
+      if (material.pricingMode !== "VOLUME" && weight <= 0) {
+        alert("当前材料按重量计价，请填写有效的重量。");
+        return;
+      }
 
       const days = parseFloat(document.getElementById("printDays").value) || 0;
       const hours = parseFloat(document.getElementById("printHours").value) || 0;
@@ -1615,7 +2720,9 @@
         ? (parseFloat(customMinInput) || 0)
         : runtimeConfig.defaultMinPricePerPart;
 
-      const materialCostPerPart = (weight / 1000) * material.pricePerKg;
+      const materialCostPerPart = material.pricingMode === "VOLUME"
+        ? ((volume / 1000000) * (material.pricePerCubicMeter || 0))
+        : ((weight / 1000) * (material.pricePerKg || 0));
       const machineCostPerPart = totalHours * machine.hourlyRate;
       const totalPostMinutes = (post.baseMinutes || 0) + (post.minutesPerGram || 0) * weight;
       const postLaborCost = (runtimeConfig.laborHourlyCost || 0) * totalPostMinutes / 60;
@@ -1629,6 +2736,13 @@
       const finalPricePerPart = Math.max(withProfitPerPart, minPricePerPart);
       const totalPrice = finalPricePerPart * quantity;
 
+      const materialPriceLabel = material.pricingMode === "VOLUME"
+        ? `${material.pricePerCubicMeter ?? 0} 元/m³`
+        : `${material.pricePerKg ?? 0} 元/kg`;
+      const materialUsageLabel = material.pricingMode === "VOLUME"
+        ? `${volume.toFixed(2)} cm³`
+        : `${weight.toFixed(2)} g`;
+
       const resultEl = document.getElementById("result");
       const resultTotalEl = document.getElementById("result-total");
       const resultDetailEl = document.getElementById("result-detail");
@@ -1637,8 +2751,8 @@
 
       const lines = [
         `▶ 加工类型：${processLabel}`,
-        `▶ 材料：${material.vendor} / ${material.name}  ${material.pricePerKg} 元/kg`,
-        `   - 单件耗材：${weight.toFixed(2)} g → 材料成本：${formatMoney(materialCostPerPart)}`,
+        `▶ 材料：${material.vendor} / ${material.name}  ${materialPriceLabel}`,
+        `   - 单件耗材：${materialUsageLabel} → 材料成本：${formatMoney(materialCostPerPart)}`,
         `▶ 设备：${machine.vendor} / ${machine.name}  ${machine.hourlyRate} 元/小时`,
         `   - 单件打印时间：${days} 天 ${hours} 小时 ${minutes} 分钟 ≈ ${totalHours.toFixed(2)} 小时`,
         `   - 设备成本：${formatMoney(machineCostPerPart)}`,
@@ -1663,6 +2777,7 @@
         machine,
         post,
         weight,
+        volume,
         days,
         hours,
         minutes,
@@ -1685,6 +2800,7 @@
         processType,
         processLabel
       };
+
     });
 
     document.getElementById("resetBtn").addEventListener("click", () => {
@@ -1698,6 +2814,7 @@
         alert("请先计算一次报价，再导出报价单。");
         return;
       }
+      persistQuoteResult(lastQuote);
       const now = new Date();
       const dateStr = now.toLocaleString("zh-CN");
       const lines = [
@@ -1707,8 +2824,8 @@
         `加工类型：${lastQuote.processLabel}`,
         "",
         `材料：${lastQuote.material.vendor} / ${lastQuote.material.name}`,
-        `材料单价：${lastQuote.material.pricePerKg} 元/kg`,
-        `单件耗材：${lastQuote.weight.toFixed(2)} g`,
+        `材料单价：${lastQuote.material.pricingMode === "VOLUME" ? `${lastQuote.material.pricePerCubicMeter} 元/m³` : `${lastQuote.material.pricePerKg} 元/kg`}`,
+        `单件耗材：${lastQuote.material.pricingMode === "VOLUME" ? `${lastQuote.volume.toFixed(2)} cm³` : `${lastQuote.weight.toFixed(2)} g`}`,
         `材料成本（单件）：${formatMoney(lastQuote.materialCostPerPart)}`,
         "",
         `设备：${lastQuote.machine.vendor} / ${lastQuote.machine.name}`,
@@ -1748,9 +2865,42 @@
 
     // ===== 页面初始化 =====
     window.addEventListener("DOMContentLoaded", async () => {
+      document.querySelectorAll(".main-tabs .page-tab").forEach(btn => {
+        btn.addEventListener("click", () => {
+          if (btn.dataset.main === "adminMain" && !isAdmin) {
+            alert("仅管理员可访问，请先使用管理员账户登录。");
+            return;
+          }
+          if (btn.dataset.main === "recordsMain") {
+            if (!isAuthenticated()) {
+              alert("请先登录后查看报价记录。");
+              return;
+            }
+            if (!isAdmin && !canViewRecords) {
+              alert("当前账号无查看报价记录的权限，请联系管理员开启。");
+              return;
+            }
+          }
+          setMainTab(btn);
+        });
+      });
+
+      document.querySelectorAll("#adminTabs .page-tab").forEach(btn => {
+        btn.addEventListener("click", () => {
+          setAdminSubTab(btn);
+          const targetId = btn.getAttribute("data-section");
+          if (targetId === "recordsSection") {
+            renderQuoteRecords();
+            renderQuoteSummary();
+          }
+          if (targetId === "userManagementSection") {
+            renderUserTable();
+          }
+        });
+      });
       initProcessTypeSelector();
-      await loadSettingsFromServer();
-      await checkAdminStatus();
+      updateAuthUI();
+      await refreshAuthState();
     });
   </script>
 </body>

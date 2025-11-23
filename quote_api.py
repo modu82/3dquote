@@ -1,7 +1,8 @@
 from fastapi import FastAPI, HTTPException, Header, Request
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
-from typing import List, Optional, Dict
+from typing import List, Optional, Dict, Literal
+from datetime import datetime
 import json
 import os
 import hashlib
@@ -21,12 +22,20 @@ app.add_middleware(
 
 SETTINGS_FILE = "/data/settings.json"
 ACCOUNT_FILE = "/data/admin_account.json"
+USER_ACCOUNT_FILE = "/data/user_account.json"
+ACCOUNTS_FILE = "/data/accounts.json"
+QUOTES_FILE = "/data/quotes.json"
 
 # 初始管理员信息（如果 ACCOUNT_FILE 不存在，就用这个创建）
 DEFAULT_ADMIN_USER = os.getenv("ADMIN_USER", "admin")
 DEFAULT_ADMIN_PASS = os.getenv("ADMIN_PASS", "changeme")
 
+DEFAULT_USER_USER = os.getenv("USER_USER", "user")
+DEFAULT_USER_PASS = os.getenv("USER_PASS", "123456")
+
 SESSION_HEADER = "X-Admin-Session"
+USER_SESSION_HEADER = "X-User-Session"
+GENERIC_SESSION_HEADER = "X-Session"
 
 
 # ====== Pydantic 模型 ======
@@ -34,7 +43,9 @@ SESSION_HEADER = "X-Admin-Session"
 class Material(BaseModel):
     vendor: str          # 厂商
     name: str            # 型号/材料名
-    pricePerKg: float    # 元 / kg
+    pricePerKg: Optional[float] = None    # 元 / kg（重量计价时必填）
+    pricePerCubicMeter: Optional[float] = None  # 元 / m³（体积计价时必填）
+    pricingMode: Literal["WEIGHT", "VOLUME"] = "WEIGHT"
     processType: Optional[str] = None  # 加工类型，None 视为通用
 
 
@@ -74,10 +85,14 @@ class Settings(BaseModel):
     # 新增：后处理规则列表
     postProcessRules: List[PostProcessRule] = []
 
-class AdminAccount(BaseModel):
+class Account(BaseModel):
     username: str
     salt: str
     password_hash: str
+    role: Literal["admin", "user"] = "user"
+    active: bool = True
+    recordEnabled: bool = True
+    canViewRecords: bool = False
 
 
 class LoginRequest(BaseModel):
@@ -88,11 +103,47 @@ class LoginRequest(BaseModel):
 class LoginResponse(BaseModel):
     token: str
     username: str
+    role: Literal["admin", "user"]
+    recordEnabled: bool
+    canViewRecords: bool
 
 
 class ChangePasswordRequest(BaseModel):
     oldPassword: str
     newPassword: str
+
+
+class QuoteRecordCreate(BaseModel):
+    processType: str
+    processLabel: Optional[str] = None
+    quantity: int
+    totalPrice: float
+    finalPricePerPart: float
+    costSumPerPart: float
+    profitMargin: float
+    materialCostPerPart: float
+    machineCostPerPart: float
+    postCostPerPart: float
+    setupCostPerPart: float
+    material: Dict
+    machine: Dict
+    postProcess: Dict
+    weight: Optional[float] = None
+    volume: Optional[float] = None
+    totalHours: Optional[float] = None
+    visibility: Literal["admin_only", "all_users", "owner_only"] = "admin_only"
+    adopted: bool = False
+
+
+class QuoteRecord(QuoteRecordCreate):
+    id: str
+    createdAt: str
+    createdBy: str
+
+
+class QuoteRecordUpdate(BaseModel):
+    visibility: Optional[Literal["admin_only", "all_users", "owner_only"]] = None
+    adopted: Optional[bool] = None
 
 
 # ====== 默认配置 ======
@@ -104,8 +155,20 @@ DEFAULT_SETTINGS = Settings(
         Material(vendor="通用", name="ABS", pricePerKg=160, processType="FDM_3D_PRINT"),
         Material(vendor="通用", name="水洗树脂", pricePerKg=220, processType="RESIN_3D_PRINT"),
         Material(vendor="通用", name="高韧树脂", pricePerKg=260, processType="RESIN_3D_PRINT"),
-        Material(vendor="通用木料", name="桦木板", pricePerKg=35, processType="CNC_MILLING"),
-        Material(vendor="通用木料", name="樱桃木板", pricePerKg=65, processType="CNC_MILLING"),
+        Material(
+            vendor="通用木料",
+            name="桦木板",
+            pricingMode="VOLUME",
+            pricePerCubicMeter=3800,
+            processType="CNC_MILLING",
+        ),
+        Material(
+            vendor="通用木料",
+            name="樱桃木板",
+            pricingMode="VOLUME",
+            pricePerCubicMeter=5200,
+            processType="CNC_MILLING",
+        ),
         Material(vendor="通用板材", name="亚克力板", pricePerKg=45, processType="CO2_LASER_ENGRAVE_CUT"),
     ],
     machines=[
@@ -169,6 +232,12 @@ def _migrate_old_material(m: dict) -> Material:
         m["vendor"] = "未分类"
     if "processType" not in m:
         m["processType"] = None
+    if "pricingMode" not in m:
+        m["pricingMode"] = "WEIGHT"
+    if m.get("pricingMode") == "WEIGHT" and "pricePerKg" not in m:
+        m["pricePerKg"] = 0
+    if m.get("pricingMode") == "VOLUME" and "pricePerCubicMeter" not in m:
+        m["pricePerCubicMeter"] = 0
     return Material(**m)
 
 
@@ -242,7 +311,7 @@ def save_settings(settings: Settings):
         json.dump(settings.dict(), f, ensure_ascii=False, indent=2)
 
 
-# ====== 工具函数：密码 & 管理员账户 ======
+# ====== 工具函数：密码 & 账户 ======
 
 def hash_password(password: str, salt: str) -> str:
     return hashlib.sha256((salt + password).encode("utf-8")).hexdigest()
@@ -252,68 +321,188 @@ def verify_password(password: str, salt: str, password_hash: str) -> bool:
     return hash_password(password, salt) == password_hash
 
 
-def load_admin_account() -> AdminAccount:
-    """从文件读取管理员账户，不存在则用默认用户名/密码创建。"""
+def save_accounts(accounts: List[Account]):
+    os.makedirs(os.path.dirname(ACCOUNTS_FILE), exist_ok=True)
+    with open(ACCOUNTS_FILE, "w", encoding="utf-8") as f:
+        json.dump([a.dict() for a in accounts], f, ensure_ascii=False, indent=2)
+
+
+def load_accounts() -> List[Account]:
+    # 优先读取新的多账户文件
+    if os.path.exists(ACCOUNTS_FILE):
+        try:
+            with open(ACCOUNTS_FILE, "r", encoding="utf-8") as f:
+                data = json.load(f) or []
+            loaded = [Account(**item) for item in data]
+            if any(acc.role == "admin" and acc.active for acc in loaded):
+                return loaded
+        except Exception as e:
+            print("Failed to load accounts.json, fallback to defaults:", e)
+
+    migrated: List[Account] = []
+    # 兼容旧版的 admin_account.json
     if os.path.exists(ACCOUNT_FILE):
         try:
             with open(ACCOUNT_FILE, "r", encoding="utf-8") as f:
                 data = json.load(f)
-            return AdminAccount(**data)
+            migrated.append(Account(**data, role="admin", active=True))
         except Exception as e:
-            print("Failed to load admin_account.json, using default admin:", e)
+            print("Failed to migrate admin account:", e)
+    # 兼容旧版的 user_account.json
+    if os.path.exists(USER_ACCOUNT_FILE):
+        try:
+            with open(USER_ACCOUNT_FILE, "r", encoding="utf-8") as f:
+                data = json.load(f)
+            migrated.append(Account(**data, role="user", active=True))
+        except Exception as e:
+            print("Failed to migrate user account:", e)
 
-    # 创建默认账号
-    salt = secrets.token_hex(16)
-    password_hash = hash_password(DEFAULT_ADMIN_PASS, salt)
-    account = AdminAccount(username=DEFAULT_ADMIN_USER, salt=salt, password_hash=password_hash)
-    save_admin_account(account)
-    print(f"[INIT] Created default admin account username={DEFAULT_ADMIN_USER}, password={DEFAULT_ADMIN_PASS}")
-    return account
+    if migrated:
+        save_accounts(migrated)
+        return migrated
+
+    # 默认初始化至少一个管理员与一个普通用户
+    salt_admin = secrets.token_hex(16)
+    salt_user = secrets.token_hex(16)
+    defaults = [
+        Account(
+            username=DEFAULT_ADMIN_USER,
+            salt=salt_admin,
+            password_hash=hash_password(DEFAULT_ADMIN_PASS, salt_admin),
+            role="admin",
+            active=True,
+            recordEnabled=True,
+            canViewRecords=True,
+        ),
+        Account(
+            username=DEFAULT_USER_USER,
+            salt=salt_user,
+            password_hash=hash_password(DEFAULT_USER_PASS, salt_user),
+            role="user",
+            active=True,
+            recordEnabled=True,
+            canViewRecords=False,
+        ),
+    ]
+    save_accounts(defaults)
+    print(
+        f"[INIT] Created default admin={DEFAULT_ADMIN_USER}/{DEFAULT_ADMIN_PASS}, user={DEFAULT_USER_USER}/{DEFAULT_USER_PASS}"
+    )
+    return defaults
 
 
-def save_admin_account(account: AdminAccount):
-    os.makedirs(os.path.dirname(ACCOUNT_FILE), exist_ok=True)
-    with open(ACCOUNT_FILE, "w", encoding="utf-8") as f:
-        json.dump(account.dict(), f, ensure_ascii=False, indent=2)
-
-
-ADMIN_ACCOUNT: AdminAccount = load_admin_account()
+ACCOUNTS: List[Account] = load_accounts()
 
 # ====== 简单 Session 管理（保存在内存） ======
 
-SESSIONS: Dict[str, str] = {}  # token -> username
+SESSIONS: Dict[str, Dict[str, str]] = {}  # token -> {username, role}
 
 
-def create_session(username: str) -> str:
+def get_account(username: str) -> Optional[Account]:
+    for acc in ACCOUNTS:
+        if acc.username == username:
+            return acc
+    return None
+
+
+def load_quote_records() -> List[QuoteRecord]:
+    if not os.path.exists(QUOTES_FILE):
+        return []
+    try:
+        with open(QUOTES_FILE, "r", encoding="utf-8") as f:
+            data = json.load(f)
+        records = []
+        for item in data:
+            try:
+                defaults = {
+                    "visibility": item.get("visibility", "admin_only"),
+                    "adopted": item.get("adopted", False),
+                    "createdBy": item.get("createdBy") or item.get("username") or "unknown",
+                }
+                merged = {**item, **defaults}
+                if merged["visibility"] not in ("admin_only", "all_users", "owner_only"):
+                    merged["visibility"] = "admin_only"
+                records.append(QuoteRecord(**merged))
+            except Exception:
+                continue
+        return records
+    except Exception as e:
+        print("Failed to load quotes:", e)
+        return []
+
+
+def save_quote_records(records: List[QuoteRecord]):
+    os.makedirs(os.path.dirname(QUOTES_FILE), exist_ok=True)
+    with open(QUOTES_FILE, "w", encoding="utf-8") as f:
+        json.dump([r.dict() for r in records], f, ensure_ascii=False, indent=2)
+
+
+def create_session(username: str, role: str) -> str:
     token = uuid4().hex + secrets.token_hex(8)
-    SESSIONS[token] = username
+    SESSIONS[token] = {"username": username, "role": role}
     return token
 
 
-def get_username_from_session_token(token: Optional[str]) -> Optional[str]:
+def get_session_from_token(token: Optional[str]) -> Optional[Dict[str, str]]:
     if not token:
         return None
-    return SESSIONS.get(token)
+    session = SESSIONS.get(token)
+    if not session:
+        return None
+    acc = get_account(session.get("username", ""))
+    if not acc or not acc.active or acc.role != session.get("role"):
+        return None
+    return session
 
 
-def require_admin(token: Optional[str]) -> str:
-    """检查 session token 是否有效，返回用户名；无效则抛异常。"""
-    username = get_username_from_session_token(token)
-    if not username:
+def require_admin(
+    admin_token: Optional[str], user_token: Optional[str] = None, generic_token: Optional[str] = None
+) -> Dict[str, str]:
+    session = (
+        get_session_from_token(admin_token)
+        or get_session_from_token(generic_token)
+        or get_session_from_token(user_token)
+    )
+    if not session:
         raise HTTPException(status_code=401, detail="未登录或会话已失效")
-    return username
+    if session.get("role") != "admin":
+        raise HTTPException(status_code=403, detail="没有管理员权限")
+    return session
+
+
+def require_authenticated(
+    user_token: Optional[str], admin_token: Optional[str], generic_token: Optional[str] = None
+) -> Dict[str, str]:
+    session = (
+        get_session_from_token(admin_token)
+        or get_session_from_token(generic_token)
+        or get_session_from_token(user_token)
+    )
+    if not session:
+        raise HTTPException(status_code=401, detail="未登录或会话已失效")
+    return session
 
 
 # ====== API：公开的设置读取 & 受保护的设置修改 ======
 
 @app.get("/api/settings", response_model=Settings)
-def get_settings():
-    """所有人都可以读取设置（用于报价）。"""
+def get_settings(
+    x_user_session: Optional[str] = Header(None),
+    x_admin_session: Optional[str] = Header(None),
+    x_session: Optional[str] = Header(None),
+):
+    """登录后才能读取设置（用于报价）。"""
+    require_authenticated(x_user_session, x_admin_session, x_session)
     return load_settings()
 
 
 @app.post("/api/settings", response_model=Settings)
-def update_settings(settings: Settings, x_admin_session: Optional[str] = Header(None)):
+def update_settings(
+    settings: Settings,
+    x_user_session: Optional[str] = Header(None),
+    x_admin_session: Optional[str] = Header(None),
+    x_session: Optional[str] = Header(None),
+):
     """只有登录的管理员才能修改设置。"""
     if len(settings.materials) == 0:
         raise HTTPException(status_code=400, detail="至少需要一个材料")
@@ -321,64 +510,535 @@ def update_settings(settings: Settings, x_admin_session: Optional[str] = Header(
         raise HTTPException(status_code=400, detail="至少需要一台设备")
 
     # 权限检查
-    require_admin(x_admin_session)
+    require_admin(x_admin_session, x_user_session, x_session)
 
     save_settings(settings)
     return settings
 
 
-# ====== API：管理员登录 / 登出 / 状态 / 改密码 ======
+# ====== 统一登录 / 登出 / 状态 ======
 
-@app.post("/api/admin/login", response_model=LoginResponse)
-def admin_login(body: LoginRequest):
-    """管理员登录：传用户名+密码，返回 session token。"""
-    global ADMIN_ACCOUNT
 
-    if body.username != ADMIN_ACCOUNT.username:
+def _persist_accounts(accounts: List[Account]):
+    global ACCOUNTS
+    ACCOUNTS = accounts
+    save_accounts(accounts)
+
+
+def invalidate_sessions_for(username: str):
+    to_delete = [token for token, session in SESSIONS.items() if session.get("username") == username]
+    for token in to_delete:
+        del SESSIONS[token]
+
+
+@app.post("/api/auth/login", response_model=LoginResponse)
+def auth_login(body: LoginRequest):
+    """统一的登录接口，支持管理员和普通用户。"""
+    account = next((a for a in ACCOUNTS if a.username == body.username and a.active), None)
+    if not account:
+        raise HTTPException(status_code=401, detail="用户名或密码错误或已被禁用")
+
+    if not verify_password(body.password, account.salt, account.password_hash):
         raise HTTPException(status_code=401, detail="用户名或密码错误")
 
-    if not verify_password(body.password, ADMIN_ACCOUNT.salt, ADMIN_ACCOUNT.password_hash):
-        raise HTTPException(status_code=401, detail="用户名或密码错误")
+    token = create_session(account.username, account.role)
+    return LoginResponse(
+        token=token,
+        username=account.username,
+        role=account.role,
+        recordEnabled=account.recordEnabled,
+        canViewRecords=account.canViewRecords,
+    )
 
-    token = create_session(ADMIN_ACCOUNT.username)
-    return LoginResponse(token=token, username=ADMIN_ACCOUNT.username)
 
-
-@app.post("/api/admin/logout")
-def admin_logout(x_admin_session: Optional[str] = Header(None)):
-    """管理员退出登录：失效当前 session。"""
-    if x_admin_session and x_admin_session in SESSIONS:
-        del SESSIONS[x_admin_session]
+@app.post("/api/auth/logout")
+def auth_logout(
+    x_session: Optional[str] = Header(None),
+    x_admin_session: Optional[str] = Header(None),
+    x_user_session: Optional[str] = Header(None),
+):
+    for token in [x_session, x_admin_session, x_user_session]:
+        if token and token in SESSIONS:
+            del SESSIONS[token]
     return {"message": "已退出登录"}
 
 
-@app.get("/api/admin/status")
-def admin_status(x_admin_session: Optional[str] = Header(None)):
-    """检查当前 session 是否已登录。"""
-    username = get_username_from_session_token(x_admin_session)
+@app.get("/api/auth/status")
+def auth_status(
+    x_session: Optional[str] = Header(None),
+    x_admin_session: Optional[str] = Header(None),
+    x_user_session: Optional[str] = Header(None),
+):
+    session = (
+        get_session_from_token(x_session)
+        or get_session_from_token(x_admin_session)
+        or get_session_from_token(x_user_session)
+    )
+    is_authed = bool(session) and session.get("role") in {"user", "admin"}
+    account = get_account(session.get("username")) if session else None
     return {
-        "authenticated": bool(username),
-        "username": username,
+        "authenticated": is_authed,
+        "username": session.get("username") if is_authed and session else None,
+        "role": session.get("role") if is_authed and session else None,
+        "recordEnabled": account.recordEnabled if account else None,
+        "canViewRecords": account.canViewRecords if account else None,
     }
 
 
 @app.post("/api/admin/change-password")
-def admin_change_password(body: ChangePasswordRequest, x_admin_session: Optional[str] = Header(None)):
-    """修改管理员密码：需要已经登录，并提供旧密码、新密码。"""
-    global ADMIN_ACCOUNT
+def admin_change_password(
+    body: ChangePasswordRequest,
+    x_admin_session: Optional[str] = Header(None),
+    x_user_session: Optional[str] = Header(None),
+    x_session: Optional[str] = Header(None),
+):
+    """管理员修改自身密码。"""
+    session = require_admin(x_admin_session, x_user_session, x_session)
+    account = get_account(session["username"])
+    if not account:
+        raise HTTPException(status_code=400, detail="账号不存在")
 
-    username = require_admin(x_admin_session)
-
-    # 再用旧密码校验一遍
-    if not verify_password(body.oldPassword, ADMIN_ACCOUNT.salt, ADMIN_ACCOUNT.password_hash):
+    if not verify_password(body.oldPassword, account.salt, account.password_hash):
         raise HTTPException(status_code=403, detail="旧密码不正确")
 
     new_salt = secrets.token_hex(16)
     new_hash = hash_password(body.newPassword, new_salt)
-    ADMIN_ACCOUNT = AdminAccount(username=username, salt=new_salt, password_hash=new_hash)
-    save_admin_account(ADMIN_ACCOUNT)
+    updated_accounts: List[Account] = []
+    for acc in ACCOUNTS:
+        if acc.username == account.username:
+            updated_accounts.append(
+                Account(
+                    username=acc.username,
+                    salt=new_salt,
+                    password_hash=new_hash,
+                    role=acc.role,
+                    active=acc.active,
+                )
+            )
+        else:
+            updated_accounts.append(acc)
 
-    # 可选：所有已有 session 失效
-    SESSIONS.clear()
-
+    _persist_accounts(updated_accounts)
+    invalidate_sessions_for(account.username)
     return {"message": "密码已更新，请使用新密码重新登录"}
+
+
+class UserPublic(BaseModel):
+    username: str
+    role: Literal["admin", "user"]
+    active: bool
+    recordEnabled: bool
+    canViewRecords: bool
+
+
+class ManageUserCreate(BaseModel):
+    username: str
+    password: str
+    role: Literal["admin", "user"] = "user"
+    active: bool = True
+    recordEnabled: bool = True
+    canViewRecords: bool = False
+
+
+class ManageUserToggle(BaseModel):
+    active: bool
+
+
+class ManageUserReset(BaseModel):
+    newPassword: str
+
+
+class ManageUserUpdate(BaseModel):
+    newUsername: Optional[str] = None
+    role: Optional[Literal["admin", "user"]] = None
+    recordEnabled: Optional[bool] = None
+    canViewRecords: Optional[bool] = None
+
+
+@app.get("/api/admin/users", response_model=List[UserPublic])
+def list_users(
+    x_admin_session: Optional[str] = Header(None),
+    x_user_session: Optional[str] = Header(None),
+    x_session: Optional[str] = Header(None),
+):
+    require_admin(x_admin_session, x_user_session, x_session)
+    return [
+        UserPublic(
+            username=a.username,
+            role=a.role,
+            active=a.active,
+            recordEnabled=a.recordEnabled,
+            canViewRecords=a.canViewRecords,
+        )
+        for a in ACCOUNTS
+    ]
+
+
+@app.post("/api/admin/users", response_model=UserPublic)
+def create_user(
+    body: ManageUserCreate,
+    x_admin_session: Optional[str] = Header(None),
+    x_user_session: Optional[str] = Header(None),
+    x_session: Optional[str] = Header(None),
+):
+    require_admin(x_admin_session, x_user_session, x_session)
+    if get_account(body.username):
+        raise HTTPException(status_code=400, detail="用户名已存在")
+    salt = secrets.token_hex(16)
+    pwd_hash = hash_password(body.password, salt)
+    new_account = Account(
+        username=body.username,
+        salt=salt,
+        password_hash=pwd_hash,
+        role=body.role,
+        active=body.active,
+        recordEnabled=body.recordEnabled,
+        canViewRecords=body.canViewRecords,
+    )
+    updated = ACCOUNTS + [new_account]
+    _persist_accounts(updated)
+    return UserPublic(
+        username=new_account.username,
+        role=new_account.role,
+        active=new_account.active,
+        recordEnabled=new_account.recordEnabled,
+        canViewRecords=new_account.canViewRecords,
+    )
+
+
+@app.post("/api/admin/users/{username}/toggle", response_model=UserPublic)
+def toggle_user(
+    username: str,
+    body: ManageUserToggle,
+    x_admin_session: Optional[str] = Header(None),
+    x_user_session: Optional[str] = Header(None),
+    x_session: Optional[str] = Header(None),
+):
+    require_admin(x_admin_session, x_user_session, x_session)
+    account = get_account(username)
+    if not account:
+        raise HTTPException(status_code=404, detail="用户不存在")
+    if account.role == "admin" and not body.active:
+        # 确保至少一个管理员处于启用状态
+        other_active_admin = any(
+            a.username != username and a.role == "admin" and a.active for a in ACCOUNTS
+        )
+        if not other_active_admin:
+            raise HTTPException(status_code=400, detail="至少需要保留一名启用的管理员")
+
+    updated_accounts: List[Account] = []
+    for acc in ACCOUNTS:
+        if acc.username == username:
+            updated_accounts.append(
+                Account(
+                    username=acc.username,
+                    salt=acc.salt,
+                    password_hash=acc.password_hash,
+                    role=acc.role,
+                    active=body.active,
+                    recordEnabled=acc.recordEnabled,
+                    canViewRecords=acc.canViewRecords,
+                )
+            )
+        else:
+            updated_accounts.append(acc)
+
+    _persist_accounts(updated_accounts)
+    if not body.active:
+        invalidate_sessions_for(username)
+    return UserPublic(
+        username=username,
+        role=account.role,
+        active=body.active,
+        recordEnabled=account.recordEnabled,
+        canViewRecords=account.canViewRecords,
+    )
+
+
+@app.post("/api/admin/users/{username}/reset-password")
+def reset_user_password(
+    username: str,
+    body: ManageUserReset,
+    x_admin_session: Optional[str] = Header(None),
+    x_user_session: Optional[str] = Header(None),
+    x_session: Optional[str] = Header(None),
+):
+    require_admin(x_admin_session, x_user_session, x_session)
+    account = get_account(username)
+    if not account:
+        raise HTTPException(status_code=404, detail="用户不存在")
+    new_salt = secrets.token_hex(16)
+    new_hash = hash_password(body.newPassword, new_salt)
+    updated_accounts: List[Account] = []
+    for acc in ACCOUNTS:
+        if acc.username == username:
+            updated_accounts.append(
+                Account(
+                    username=acc.username,
+                    salt=new_salt,
+                    password_hash=new_hash,
+                    role=acc.role,
+                    active=acc.active,
+                    recordEnabled=acc.recordEnabled,
+                    canViewRecords=acc.canViewRecords,
+                )
+            )
+        else:
+            updated_accounts.append(acc)
+    _persist_accounts(updated_accounts)
+    invalidate_sessions_for(username)
+    return {"message": "密码已重置"}
+
+
+@app.put("/api/admin/users/{username}", response_model=UserPublic)
+def update_user(
+    username: str,
+    body: ManageUserUpdate,
+    x_admin_session: Optional[str] = Header(None),
+    x_user_session: Optional[str] = Header(None),
+    x_session: Optional[str] = Header(None),
+):
+    require_admin(x_admin_session, x_user_session, x_session)
+    account = get_account(username)
+    if not account:
+        raise HTTPException(status_code=404, detail="用户不存在")
+
+    new_username = body.newUsername.strip() if body.newUsername else account.username
+    new_role = body.role or account.role
+    new_record_enabled = account.recordEnabled if body.recordEnabled is None else bool(body.recordEnabled)
+    new_view_permission = account.canViewRecords if body.canViewRecords is None else bool(body.canViewRecords)
+
+    if new_username != username and get_account(new_username):
+        raise HTTPException(status_code=400, detail="用户名已存在")
+
+    if account.role == "admin" and new_role != "admin":
+        other_active_admin = any(
+            a.username != username and a.role == "admin" and a.active for a in ACCOUNTS
+        )
+        if not other_active_admin:
+            raise HTTPException(status_code=400, detail="至少需要保留一名启用的管理员")
+
+    updated_accounts: List[Account] = []
+    for acc in ACCOUNTS:
+        if acc.username == username:
+            updated_accounts.append(
+                Account(
+                    username=new_username,
+                    salt=acc.salt,
+                    password_hash=acc.password_hash,
+                    role=new_role,
+                    active=acc.active,
+                    recordEnabled=new_record_enabled,
+                    canViewRecords=new_view_permission,
+                )
+            )
+        else:
+            updated_accounts.append(acc)
+    _persist_accounts(updated_accounts)
+    if new_username != username:
+        invalidate_sessions_for(username)
+    if new_role != account.role:
+        invalidate_sessions_for(new_username)
+    return UserPublic(
+        username=new_username,
+        role=new_role,
+        active=account.active,
+        recordEnabled=new_record_enabled,
+        canViewRecords=new_view_permission,
+    )
+
+
+@app.delete("/api/admin/users/{username}")
+def delete_user(
+    username: str,
+    x_admin_session: Optional[str] = Header(None),
+    x_user_session: Optional[str] = Header(None),
+    x_session: Optional[str] = Header(None),
+):
+    require_admin(x_admin_session, x_user_session, x_session)
+    account = get_account(username)
+    if not account:
+        raise HTTPException(status_code=404, detail="用户不存在")
+    if account.role == "admin":
+        other_admin = [a for a in ACCOUNTS if a.username != username and a.role == "admin" and a.active]
+        if not other_admin:
+            raise HTTPException(status_code=400, detail="至少需要保留一名启用的管理员")
+    updated_accounts = [acc for acc in ACCOUNTS if acc.username != username]
+    _persist_accounts(updated_accounts)
+    invalidate_sessions_for(username)
+    return {"deleted": username}
+
+
+# ====== 报价记录：创建 / 查询 / 统计 ======
+
+
+@app.post("/api/quotes", response_model=QuoteRecord)
+def create_quote_record(
+    body: QuoteRecordCreate,
+    x_user_session: Optional[str] = Header(None),
+    x_admin_session: Optional[str] = Header(None),
+    x_session: Optional[str] = Header(None),
+):
+    """保存一次报价结果，用于后续对账和统计。"""
+    session = require_authenticated(x_user_session, x_admin_session, x_session)
+    account = get_account(session.get("username", ""))
+    if not account or not account.recordEnabled:
+        raise HTTPException(status_code=403, detail="当前账号的报价记录功能已被禁用")
+    is_admin = session.get("role") == "admin"
+    visibility = (
+        body.visibility if is_admin and body.visibility in ("admin_only", "all_users", "owner_only") else None
+    )
+    # 普通用户不允许自定义可见范围，默认仅创建人可见；管理员可选择
+    visibility = visibility or ("admin_only" if is_admin else "owner_only")
+
+    existing = load_quote_records()
+    record = QuoteRecord(
+        **body.dict(),
+        id=uuid4().hex,
+        createdAt=datetime.utcnow().isoformat() + "Z",
+        createdBy=session.get("username", "unknown"),
+        visibility=visibility,
+        adopted=bool(body.adopted) if is_admin else False,
+    )
+    existing.append(record)
+    save_quote_records(existing)
+    return record
+
+
+@app.get("/api/quotes")
+def list_quote_records(
+    page: int = 1,
+    pageSize: int = 20,
+    month: Optional[str] = None,  # 形如 2024-03
+    creator: Optional[str] = None,
+    adopted: Optional[bool] = None,
+    visibility: Optional[Literal["admin_only", "all_users", "owner_only"]] = None,
+    x_admin_session: Optional[str] = Header(None),
+    x_user_session: Optional[str] = Header(None),
+    x_session: Optional[str] = Header(None),
+):
+    """分页查询报价记录，支持按月份、创建人、采用状态与可见性过滤。"""
+    session = require_authenticated(x_user_session, x_admin_session, x_session)
+    account = get_account(session.get("username", ""))
+    if session.get("role") != "admin" and (not account or not account.canViewRecords):
+        raise HTTPException(status_code=403, detail="无权查看报价记录")
+    if session.get("role") != "admin":
+        visibility = None
+    page = max(page, 1)
+    pageSize = min(max(pageSize, 1), 200)
+    all_records = load_quote_records()
+
+    if session.get("role") != "admin":
+        allowed = []
+        for r in all_records:
+            if r.visibility == "all_users":
+                allowed.append(r)
+            elif r.visibility == "owner_only" and r.createdBy == session.get("username"):
+                allowed.append(r)
+        all_records = allowed
+
+    if month:
+        filtered = []
+        for r in all_records:
+            try:
+                ts = datetime.fromisoformat(r.createdAt.replace("Z", "+00:00"))
+                if ts.strftime("%Y-%m") == month:
+                    filtered.append(r)
+            except Exception:
+                continue
+        all_records = filtered
+
+    if creator:
+        all_records = [r for r in all_records if r.createdBy == creator]
+
+    if adopted is not None:
+        all_records = [r for r in all_records if bool(r.adopted) == bool(adopted)]
+
+    if visibility:
+        all_records = [r for r in all_records if r.visibility == visibility]
+    total = len(all_records)
+    start = (page - 1) * pageSize
+    end = start + pageSize
+    slice_records = all_records[start:end]
+    return {
+        "total": total,
+        "page": page,
+        "pageSize": pageSize,
+        "items": [r.dict() for r in slice_records],
+    }
+
+
+@app.get("/api/quotes/summary")
+def quote_summary(
+    year: Optional[int] = None,
+    x_admin_session: Optional[str] = Header(None),
+    x_user_session: Optional[str] = Header(None),
+    x_session: Optional[str] = Header(None),
+):
+    """按月份汇总报价数量与金额。需管理员登录。"""
+    require_admin(x_admin_session, x_user_session, x_session)
+    records = load_quote_records()
+    summary: Dict[str, Dict[str, float]] = {}
+    for r in records:
+        try:
+            ts = datetime.fromisoformat(r.createdAt.replace("Z", "+00:00"))
+        except Exception:
+            continue
+        if year and ts.year != year:
+            continue
+        key = ts.strftime("%Y-%m")
+        if key not in summary:
+            summary[key] = {"count": 0, "amount": 0.0}
+        summary[key]["count"] += 1
+        summary[key]["amount"] += float(r.totalPrice)
+    # 排序输出
+    items = [
+        {"month": k, "count": v["count"], "amount": round(v["amount"], 2)}
+        for k, v in sorted(summary.items())
+    ]
+    return {"items": items}
+
+
+@app.patch("/api/quotes/{quote_id}", response_model=QuoteRecord)
+def update_quote_record(
+    quote_id: str,
+    body: QuoteRecordUpdate,
+    x_admin_session: Optional[str] = Header(None),
+    x_user_session: Optional[str] = Header(None),
+    x_session: Optional[str] = Header(None),
+):
+    require_admin(x_admin_session, x_user_session, x_session)
+    records = load_quote_records()
+    updated_records: List[QuoteRecord] = []
+    target: Optional[QuoteRecord] = None
+    for r in records:
+        if r.id == quote_id:
+            visibility = r.visibility
+            if body.visibility in ("admin_only", "all_users", "owner_only"):
+                visibility = body.visibility
+            adopted = r.adopted if body.adopted is None else bool(body.adopted)
+            updated = QuoteRecord(**{**r.dict(), "visibility": visibility, "adopted": adopted})
+            updated_records.append(updated)
+            target = updated
+        else:
+            updated_records.append(r)
+    if not target:
+        raise HTTPException(status_code=404, detail="记录不存在")
+    save_quote_records(updated_records)
+    return target
+
+
+@app.delete("/api/quotes/{quote_id}")
+def delete_quote_record(
+    quote_id: str,
+    x_admin_session: Optional[str] = Header(None),
+    x_user_session: Optional[str] = Header(None),
+    x_session: Optional[str] = Header(None),
+):
+    require_admin(x_admin_session, x_user_session, x_session)
+    records = load_quote_records()
+    remaining = [r for r in records if r.id != quote_id]
+    if len(remaining) == len(records):
+        raise HTTPException(status_code=404, detail="记录不存在")
+    save_quote_records(remaining)
+    return {"deleted": quote_id}
