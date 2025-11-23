@@ -208,13 +208,15 @@
     .materials-table table {
       width: 100%;
       border-collapse: collapse;
+      table-layout: fixed;
     }
     .materials-table th,
     .materials-table td {
-      padding: 10px 8px;
+      padding: 10px 10px;
       border-bottom: 1px solid #eef2f7;
       vertical-align: middle;
       font-size: 14px;
+      height: 48px;
     }
     .materials-table th {
       background: #f9fafb;
@@ -237,6 +239,13 @@
     .materials-table select {
       width: 100%;
       padding: 0 10px;
+    }
+    .materials-table .unit-text,
+    .materials-table .mat-delete {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      width: 100%;
     }
     .materials-table .mini-btn {
       border-radius: 8px;
@@ -833,6 +842,7 @@
               <th style="width:11%; min-width:120px;">月工时（小时）</th>
               <th style="width:8%; min-width:100px;">功率（W）</th>
               <th style="width:10%; min-width:150px;">小时成本（元）</th>
+              <th style="width:8%; min-width:120px;">包含运营成本</th>
               <th style="width:6%; min-width:90px;">操作</th>
             </tr>
           </thead>
@@ -1214,6 +1224,7 @@
         const monthInput  = row.querySelector(".mac-monthly");
         const powerInput  = row.querySelector(".mac-power");
         const rateInput   = row.querySelector(".mac-rate");
+        const includesCheckbox = row.querySelector(".mac-rate-includes");
         const processSelect = row.querySelector(".mac-process");
 
         const vendor = (vendorInput.value || "").trim() || "未分类";
@@ -1247,7 +1258,7 @@
           expectedMonthlyHours: isNaN(monthH) || monthH <= 0 ? null : monthH,
           powerW: isNaN(power) || power <= 0 ? null : power,
           processType: normalizedProcess,
-          hourlyRateIncludesOperational: hasDepreciationInputs ? false : null
+          hourlyRateIncludesOperational: hasDepreciationInputs ? false : !!includesCheckbox?.checked
         });
       });
       return arr;
@@ -1437,7 +1448,8 @@
       life = "",
       monthH = "",
       powerW = "",
-      processType = "FDM_3D_PRINT"
+      processType = "FDM_3D_PRINT",
+      hourlyRateIncludesOperational = true
     ) {
       const tbody = document.getElementById("machinesTableBody");
       const tr = document.createElement("tr");
@@ -1456,6 +1468,12 @@
             <input type="number" class="mac-rate" step="0.1" min="0" value="${hourlyRate}">
             <button type="button" class="mini-btn mac-calc">算</button>
           </div>
+        </td>
+        <td>
+          <label style="display:flex;align-items:center;gap:6px;font-size:12px;color:#4b5563;">
+            <input type="checkbox" class="mac-rate-includes" ${hourlyRateIncludesOperational ? "checked" : ""}>
+            <span>费率已含</span>
+          </label>
         </td>
         <td><button type="button" class="mini-btn mac-delete">删</button></td>
       `;
@@ -1979,7 +1997,8 @@
           m.expectedLifeYears ?? "",
           m.expectedMonthlyHours ?? "",
           m.powerW ?? "",
-          m.processType || UNIVERSAL_PROCESS_VALUE
+          m.processType || UNIVERSAL_PROCESS_VALUE,
+          m.hourlyRateIncludesOperational !== false
         );
       });
 
@@ -2029,7 +2048,9 @@
       runtimeConfig.machines = (data.machines || []).map(m => ({
         ...m,
         processType: m.processType ?? null,
-      }));
+        hourlyRateIncludesOperational: m.hourlyRateIncludesOperational
+          ?? (m.hourlyRate > 0 ? true : null),
+        }));
       runtimeConfig.processCosts = data.processCosts && Object.keys(data.processCosts).length
         ? data.processCosts
         : CLIENT_DEFAULTS.processCosts;
@@ -3060,7 +3081,9 @@
       const machineHourly = baseMachineHourly > 0 ? baseMachineHourly : depreciationHourly;
       const operationalHourly = operatorHourly + overheadHourly + electricityHourly;
       const hourlyRateIncludesOperational = machine.hourlyRateIncludesOperational;
-      const shouldAddOperational = hourlyRateIncludesOperational !== true;
+      const inferredAllIn = hourlyRateIncludesOperational === true
+        || (hourlyRateIncludesOperational == null && baseMachineHourly > 0 && depreciationHourly === 0);
+      const shouldAddOperational = !inferredAllIn;
       const effectiveMachineHourly = machineHourly + (shouldAddOperational ? operationalHourly : 0);
       const machineCostPerPart = totalHours * effectiveMachineHourly;
       const totalPostMinutes = (post.baseMinutes || 0) + (post.minutesPerGram || 0) * weight;

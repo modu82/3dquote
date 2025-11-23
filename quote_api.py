@@ -59,6 +59,7 @@ class Machine(BaseModel):
     expectedMonthlyHours: float | None = None  # 每月预计工作小时数（小时，可选）
     powerW: float | None = None              # 运行时平均功率（W，可选）
     processType: Optional[str] = None        # 加工类型，None 视为通用
+    hourlyRateIncludesOperational: Optional[bool] = None  # 小时费率是否已含人工/电费/杂项
 
 class PostProcessRule(BaseModel):
     key: str                      # 唯一标识，比如 "NONE" / "BASIC"
@@ -181,10 +182,10 @@ DEFAULT_SETTINGS = Settings(
         Material(vendor="通用板材", name="亚克力板", pricePerKg=45, processType="CO2_LASER_ENGRAVE_CUT"),
     ],
     machines=[
-        Machine(vendor="Bambu Lab", name="A1/桌面机", hourlyRate=10, processType="FDM_3D_PRINT"),
-        Machine(vendor="Elegoo", name="Saturn 树脂机", hourlyRate=28, processType="RESIN_3D_PRINT"),
-        Machine(vendor="通用木工", name="三轴雕刻机", hourlyRate=80, processType="CNC_MILLING"),
-        Machine(vendor="通用激光", name="CO₂ 激光雕刻机", hourlyRate=120, processType="CO2_LASER_ENGRAVE_CUT"),
+        Machine(vendor="Bambu Lab", name="A1/桌面机", hourlyRate=10, processType="FDM_3D_PRINT", hourlyRateIncludesOperational=True),
+        Machine(vendor="Elegoo", name="Saturn 树脂机", hourlyRate=28, processType="RESIN_3D_PRINT", hourlyRateIncludesOperational=True),
+        Machine(vendor="通用木工", name="三轴雕刻机", hourlyRate=80, processType="CNC_MILLING", hourlyRateIncludesOperational=True),
+        Machine(vendor="通用激光", name="CO₂ 激光雕刻机", hourlyRate=120, processType="CO2_LASER_ENGRAVE_CUT", hourlyRateIncludesOperational=True),
     ],
     defaultProfitMargin=0.4,
     defaultMinPricePerPart=15.0,
@@ -279,6 +280,20 @@ def _migrate_old_machine(m: dict) -> Machine:
         m["vendor"] = "未分类"
     if "processType" not in m:
         m["processType"] = None
+    has_depreciation = (
+        isinstance(m.get("price"), (int, float))
+        and m.get("price") is not None
+        and m.get("price") > 0
+        and isinstance(m.get("expectedLifeYears"), (int, float))
+        and m.get("expectedLifeYears") is not None
+        and m.get("expectedLifeYears") > 0
+        and isinstance(m.get("expectedMonthlyHours"), (int, float))
+        and m.get("expectedMonthlyHours") is not None
+        and m.get("expectedMonthlyHours") > 0
+    )
+    if "hourlyRateIncludesOperational" not in m:
+        # 旧数据的小时成本默认包含人工/电费/杂项；若填写了折旧参数则视为不包含
+        m["hourlyRateIncludesOperational"] = False if has_depreciation else True
     return Machine(**m)
 
 
