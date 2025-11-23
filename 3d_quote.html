@@ -638,12 +638,14 @@
         全局参数
         <div style="display:flex;flex-wrap:wrap;gap:6px;align-items:center;">
           <button type="button" class="mini-btn" id="exportSettingsBtn">导出当前配置</button>
+          <button type="button" class="mini-btn" id="importSettingsBtn">导入备份/配置</button>
           <button type="button" class="mini-btn" id="backupSettingsBtn">备份当前配置</button>
-          <button type="button" class="mini-btn" id="restoreBackupBtn">恢复默认配置</button>
+          <button type="button" class="mini-btn" id="restoreBackupBtn">恢复备份配置</button>
           <button type="button" class="mini-btn" id="restoreFactoryBtn">恢复出厂设置</button>
           <button type="button" class="mini-btn" id="saveSettingsBtn">保存设置到服务器</button>
         </div>
       </h3>
+      <input type="file" accept="application/json" id="importSettingsFile" style="display:none" />
       <small>这里的参数作为默认值，影响所有报价；保存后对所有用户生效。</small>
       <div class="inline-config">
         <div>
@@ -2748,6 +2750,55 @@
       }
     }
 
+    function triggerImportSettings() {
+      if (!isAdmin || !sessionToken) {
+        alert("请先以管理员身份登录。");
+        return;
+      }
+      const fileInput = document.getElementById("importSettingsFile");
+      fileInput.value = "";
+      fileInput.click();
+    }
+
+    async function handleImportSettingsFile(event) {
+      const file = event.target.files?.[0];
+      if (!file) return;
+
+      if (!isAdmin || !sessionToken) {
+        alert("请先以管理员身份登录。");
+        event.target.value = "";
+        return;
+      }
+
+      try {
+        const content = await file.text();
+        let parsed;
+        try {
+          parsed = JSON.parse(content);
+        } catch (err) {
+          throw new Error("文件不是有效的 JSON 配置，请检查后重试。");
+        }
+
+        if (!window.confirm(`确定要导入配置文件「${file.name}」并覆盖当前设置吗？`)) return;
+
+        const resp = await fetch(`${API_BASE}/settings/import`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json", ...authHeaders() },
+          body: JSON.stringify(parsed)
+        });
+        const data = await resp.json().catch(() => ({}));
+        if (!resp.ok) throw new Error(data.detail || "导入失败");
+
+        applySettingsToRuntime(data);
+        initSettingsFromRuntime();
+        alert("已导入并应用配置，同时生成新的备份文件。");
+      } catch (e) {
+        alert(`导入失败：${e.message}`);
+      } finally {
+        event.target.value = "";
+      }
+    }
+
     async function backupCurrentSettings() {
       if (!isAdmin || !sessionToken) {
         alert("请先以管理员身份登录。");
@@ -2891,6 +2942,8 @@
     document.getElementById("changePasswordBtn").addEventListener("click", changeAdminPassword);
     document.getElementById("saveSettingsBtnMaterials").addEventListener("click", saveSettingsToServer);
     document.getElementById("saveSettingsBtnMachines").addEventListener("click", saveSettingsToServer);
+    document.getElementById("importSettingsBtn").addEventListener("click", triggerImportSettings);
+    document.getElementById("importSettingsFile").addEventListener("change", handleImportSettingsFile);
     document.getElementById("addMaterialBtn").addEventListener("click", () => {
       const vendor = currentMaterialsVendor || "未分类";
       appendMaterialRow(vendor, "", "", getCurrentProcessType(), "WEIGHT", "");
