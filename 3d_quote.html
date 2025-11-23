@@ -288,8 +288,8 @@
       gap: 8px;
     }
     .mat-price-inputs input {
-      width: 160px;
-      flex-shrink: 0;
+      width: 100%;
+      min-width: 0;
     }
     .inline-config {
       display: grid;
@@ -395,6 +395,33 @@
         <button type="button" id="userLoginBtn">登录</button>
       </div>
       <div class="hint">不同账户对应不同权限：管理员登录后可管理配置、报价记录与用户；普通账号可进行报价计算。</div>
+    </div>
+
+    <div class="login-panel" id="accountPanel" style="display:none;">
+      <h3>账户设置</h3>
+      <div class="login-row">
+        <div>
+          <label for="selfNewUsername">新用户名</label>
+          <input id="selfNewUsername" type="text" placeholder="输入新的用户名" />
+        </div>
+        <div>
+          <label for="selfUsernamePassword">当前密码</label>
+          <input id="selfUsernamePassword" type="password" placeholder="验证当前密码" />
+        </div>
+        <button type="button" id="selfChangeUsernameBtn">修改用户名</button>
+      </div>
+      <div class="login-row" style="margin-top:10px;">
+        <div>
+          <label for="selfOldPassword">当前密码</label>
+          <input id="selfOldPassword" type="password" placeholder="请输入当前密码" />
+        </div>
+        <div>
+          <label for="selfNewPassword">新密码</label>
+          <input id="selfNewPassword" type="password" placeholder="请输入新密码" />
+        </div>
+        <button type="button" id="selfChangePasswordBtn">修改密码</button>
+      </div>
+      <div class="hint">以上操作面向当前登录的账户，修改后将自动退出登录。</div>
     </div>
 
     <div id="appContent" style="display:none;">
@@ -586,7 +613,6 @@
       <h3>
         全局参数
         <div>
-          <button type="button" class="mini-btn" id="changePasswordBtn">修改管理员密码</button>
           <button type="button" class="mini-btn" id="saveSettingsBtn">保存设置到服务器</button>
         </div>
       </h3>
@@ -627,6 +653,20 @@
           <input id="configOverheadPerMachine" type="number" step="0.1" min="0" />
         </div>
       </div>
+      <h4>按工艺的成本参数</h4>
+      <div class="table-wrapper">
+        <table>
+          <thead>
+            <tr>
+              <th style="width:24%;">工艺</th>
+              <th style="width:24%;">人工成本（元/小时）</th>
+              <th style="width:24%;">每人负责设备数</th>
+              <th style="width:28%;">杂项成本（元/台·小时）</th>
+            </tr>
+          </thead>
+          <tbody id="processCostTableBody"></tbody>
+        </table>
+      </div>
 
       <!-- 后处理设置 -->
       <h3 style="display:flex;justify-content:space-between;align-items:center;">
@@ -658,6 +698,7 @@
       <!-- 材料设置 -->
       <h3 style="display:flex;justify-content:space-between;align-items:center;">
         材料设置
+        <button type="button" class="mini-btn" id="saveSettingsBtnMaterials">保存设置到服务器</button>
       </h3>
       <div class="vendor-filter">
         <label>按工艺筛选：</label>
@@ -704,6 +745,7 @@
       <!-- 设备设置 -->
       <h3 style="display:flex;justify-content:space-between;align-items:center;">
         设备设置
+        <button type="button" class="mini-btn" id="saveSettingsBtnMachines">保存设置到服务器</button>
       </h3>
 
       <div class="vendor-filter">
@@ -756,6 +798,9 @@
     <div class="section admin-sub-section" id="userManagementSection">
       <h3>用户管理</h3>
       <small>仅管理员可见：新增普通用户或管理员，重置密码、启用/禁用账号，并配置报价记录权限。</small>
+      <div style="margin:8px 0;">
+        <button type="button" class="mini-btn" id="changePasswordBtn">修改管理员密码</button>
+      </div>
       <div class="inline-config">
         <div>
           <label for="newUserName">用户名</label>
@@ -832,6 +877,12 @@
       laborHourlyCost: 0.5,           // 操作人工成本 元/小时
       machinesPerOperator: 1,         // 每人看几台设备
       overheadHourlyPerMachine: 0,    // 杂项成本 元/台·小时
+      processCosts: {
+        FDM_3D_PRINT: { laborHourlyCost: 0.5, machinesPerOperator: 1, overheadHourlyPerMachine: 0 },
+        RESIN_3D_PRINT: { laborHourlyCost: 0.6, machinesPerOperator: 1, overheadHourlyPerMachine: 0 },
+        CNC_MILLING: { laborHourlyCost: 1, machinesPerOperator: 1, overheadHourlyPerMachine: 0 },
+        CO2_LASER_ENGRAVE_CUT: { laborHourlyCost: 0.6, machinesPerOperator: 1, overheadHourlyPerMachine: 0 }
+      },
 
       materials: [
         { vendor: "通用", name: "PLA", pricePerKg: 120, processType: "FDM_3D_PRINT", pricingMode: "WEIGHT" },
@@ -975,6 +1026,55 @@
       });
       const allowed = [PROCESS_FILTER_ALL, ...PROCESS_TYPES.map(pt => pt.value)];
       selectEl.value = allowed.includes(value) ? value : PROCESS_FILTER_ALL;
+    }
+
+    function getProcessCostConfig(processType) {
+      const costs = runtimeConfig.processCosts || {};
+      const fallback = costs[processType] || {};
+      return {
+        laborHourlyCost: fallback.laborHourlyCost ?? runtimeConfig.laborHourlyCost ?? CLIENT_DEFAULTS.laborHourlyCost,
+        machinesPerOperator: fallback.machinesPerOperator ?? runtimeConfig.machinesPerOperator ?? CLIENT_DEFAULTS.machinesPerOperator,
+        overheadHourlyPerMachine: fallback.overheadHourlyPerMachine ?? runtimeConfig.overheadHourlyPerMachine ?? CLIENT_DEFAULTS.overheadHourlyPerMachine,
+      };
+    }
+
+    function renderProcessCostRows() {
+      const tbody = document.getElementById("processCostTableBody");
+      if (!tbody) return;
+      tbody.innerHTML = "";
+      PROCESS_TYPES.forEach(pt => {
+        const row = document.createElement("tr");
+        const conf = getProcessCostConfig(pt.value);
+        row.innerHTML = `
+          <td>${pt.label}</td>
+          <td><input type="number" class="process-cost-labor" data-process="${pt.value}" step="0.1" min="0" value="${conf.laborHourlyCost ?? ""}" /></td>
+          <td><input type="number" class="process-cost-mpo" data-process="${pt.value}" step="0.1" min="0" value="${conf.machinesPerOperator ?? ""}" /></td>
+          <td><input type="number" class="process-cost-oh" data-process="${pt.value}" step="0.1" min="0" value="${conf.overheadHourlyPerMachine ?? ""}" /></td>
+        `;
+        tbody.appendChild(row);
+      });
+    }
+
+    function getProcessCostsFromTable() {
+      const rows = document.querySelectorAll("#processCostTableBody tr");
+      const result = {};
+      for (const row of rows) {
+        const process = row.querySelector(".process-cost-labor")?.getAttribute("data-process");
+        if (!process) continue;
+        const labor = parseFloat(row.querySelector(".process-cost-labor")?.value);
+        const mpo = parseFloat(row.querySelector(".process-cost-mpo")?.value);
+        const oh = parseFloat(row.querySelector(".process-cost-oh")?.value);
+        if ([labor, mpo, oh].some(v => isNaN(v) || v < 0) || mpo === 0) {
+          alert("请为每个工艺填写有效的人工成本、设备数量和杂项成本（>=0，设备数量>0）");
+          return null;
+        }
+        result[process] = {
+          laborHourlyCost: labor,
+          machinesPerOperator: mpo,
+          overheadHourlyPerMachine: oh,
+        };
+      }
+      return result;
     }
 
     function getCurrentProcessType() {
@@ -1811,6 +1911,12 @@
       document.getElementById("configLaborHourly").value = (runtimeConfig.laborHourlyCost ?? CLIENT_DEFAULTS.laborHourlyCost).toString();
       document.getElementById("configMachinesPerOperator").value = (runtimeConfig.machinesPerOperator ?? CLIENT_DEFAULTS.machinesPerOperator).toString();
       document.getElementById("configOverheadPerMachine").value = (runtimeConfig.overheadHourlyPerMachine ?? CLIENT_DEFAULTS.overheadHourlyPerMachine).toString();
+      renderProcessCostRows();
+
+      const customMarginInput = document.getElementById("customMargin");
+      if (customMarginInput && customMarginInput.value === "") {
+        customMarginInput.value = (runtimeConfig.defaultProfitMargin * 100).toFixed(0);
+      }
 
           }
 
@@ -1835,6 +1941,9 @@
         runtimeConfig.laborHourlyCost = data.laborHourlyCost ?? CLIENT_DEFAULTS.laborHourlyCost;
         runtimeConfig.machinesPerOperator =  data.machinesPerOperator ?? CLIENT_DEFAULTS.machinesPerOperator;
         runtimeConfig.overheadHourlyPerMachine = data.overheadHourlyPerMachine ?? CLIENT_DEFAULTS.overheadHourlyPerMachine;
+        runtimeConfig.processCosts = data.processCosts && Object.keys(data.processCosts).length
+          ? data.processCosts
+          : CLIENT_DEFAULTS.processCosts;
         runtimeConfig.postProcessRules = Array.isArray(data.postProcessRules) && data.postProcessRules.length
           ? data.postProcessRules.map(r => ({
               ...r,
@@ -1881,6 +1990,7 @@
 
     function updateAuthUI() {
       const loginPanel = document.getElementById("loginPanel");
+      const accountPanel = document.getElementById("accountPanel");
       const appContent = document.getElementById("appContent");
       const statusEl = document.getElementById("userStatus");
       const logoutBtn = document.getElementById("userLogoutBtn");
@@ -1895,6 +2005,7 @@
 
       const authed = isAuthenticated();
       if (loginPanel) loginPanel.style.display = authed ? "none" : "";
+      if (accountPanel) accountPanel.style.display = authed ? "" : "none";
       if (appContent) appContent.style.display = authed ? "" : "none";
       if (logoutBtn) logoutBtn.style.display = authed ? "" : "none";
 
@@ -2451,6 +2562,8 @@
 
     document.getElementById("userLoginBtn").addEventListener("click", userLoginFlow);
     document.getElementById("userLogoutBtn").addEventListener("click", logoutFlow);
+    document.getElementById("selfChangePasswordBtn").addEventListener("click", selfChangePassword);
+    document.getElementById("selfChangeUsernameBtn").addEventListener("click", selfChangeUsername);
 
     // ===== 保存设置 & 修改密码 =====
     async function saveSettingsToServer() {
@@ -2525,6 +2638,9 @@
         return;
       }
 
+      const processCosts = getProcessCostsFromTable();
+      if (!processCosts) return;
+
       const payload = {
         materials,
         machines,
@@ -2535,6 +2651,7 @@
         laborHourlyCost,
         machinesPerOperator,
         overheadHourlyPerMachine,
+        processCosts,
         postProcessRules
       };
 
@@ -2566,10 +2683,63 @@
         runtimeConfig.materials = saved.materials;
         runtimeConfig.machines = saved.machines;
         runtimeConfig.postProcessRules = saved.postProcessRules;
+        runtimeConfig.processCosts = saved.processCosts || runtimeConfig.processCosts;
         rebuildPostProcessOptions();
         alert("设置已保存到服务器。");
       } catch (e) {
         alert("保存设置失败：" + e.message);
+      }
+    }
+
+    async function selfChangePassword() {
+      if (!isAuthenticated()) {
+        alert("请先登录。");
+        return;
+      }
+      const oldPwd = document.getElementById("selfOldPassword").value;
+      const newPwd = document.getElementById("selfNewPassword").value;
+      if (!oldPwd || !newPwd) {
+        alert("请填写当前密码和新密码。");
+        return;
+      }
+      try {
+        const resp = await fetch(`${API_BASE}/account/change-password`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json", ...authHeaders() },
+          body: JSON.stringify({ oldPassword: oldPwd, newPassword: newPwd })
+        });
+        const data = await resp.json().catch(() => ({}));
+        if (!resp.ok) throw new Error(data.detail || "修改失败");
+        alert("密码已更新，请重新登录。");
+        await logoutFlow();
+      } catch (e) {
+        alert(e.message || "修改失败");
+      }
+    }
+
+    async function selfChangeUsername() {
+      if (!isAuthenticated()) {
+        alert("请先登录。");
+        return;
+      }
+      const newName = document.getElementById("selfNewUsername").value.trim();
+      const password = document.getElementById("selfUsernamePassword").value;
+      if (!newName || !password) {
+        alert("请填写新用户名和当前密码。");
+        return;
+      }
+      try {
+        const resp = await fetch(`${API_BASE}/account/change-username`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json", ...authHeaders() },
+          body: JSON.stringify({ newUsername: newName, password })
+        });
+        const data = await resp.json().catch(() => ({}));
+        if (!resp.ok) throw new Error(data.detail || "修改失败");
+        alert("用户名已更新，请使用新用户名重新登录。");
+        await logoutFlow();
+      } catch (e) {
+        alert(e.message || "修改失败");
       }
     }
 
@@ -2608,6 +2778,8 @@
 
     document.getElementById("saveSettingsBtn").addEventListener("click", saveSettingsToServer);
     document.getElementById("changePasswordBtn").addEventListener("click", changeAdminPassword);
+    document.getElementById("saveSettingsBtnMaterials").addEventListener("click", saveSettingsToServer);
+    document.getElementById("saveSettingsBtnMachines").addEventListener("click", saveSettingsToServer);
     document.getElementById("addMaterialBtn").addEventListener("click", () => {
       const vendor = currentMaterialsVendor || "未分类";
       appendMaterialRow(vendor, "", "", getCurrentProcessType(), "WEIGHT", "");
@@ -2728,12 +2900,16 @@
         ? (parseFloat(customMinInput) || 0)
         : runtimeConfig.defaultMinPricePerPart;
 
+      const processCosts = getProcessCostConfig(processType);
       const materialCostPerPart = material.pricingMode === "VOLUME"
         ? ((volume / 1000000) * (material.pricePerCubicMeter || 0))
         : ((weight / 1000) * (material.pricePerKg || 0));
-      const machineCostPerPart = totalHours * machine.hourlyRate;
+      const operatorHourly = (processCosts.laborHourlyCost || 0) / (processCosts.machinesPerOperator || 1);
+      const overheadHourly = processCosts.overheadHourlyPerMachine || 0;
+      const electricityHourly = (machine.powerW ? (machine.powerW / 1000) * (runtimeConfig.electricityPrice || 0) : 0);
+      const machineCostPerPart = totalHours * (machine.hourlyRate + operatorHourly + overheadHourly + electricityHourly);
       const totalPostMinutes = (post.baseMinutes || 0) + (post.minutesPerGram || 0) * weight;
-      const postLaborCost = (runtimeConfig.laborHourlyCost || 0) * totalPostMinutes / 60;
+      const postLaborCost = (processCosts.laborHourlyCost || 0) * totalPostMinutes / 60;
       const postMaterialCost = (post.extraMaterialCostPerGram || 0) * weight;
       const postMultiplier = post.costMultiplier || 1;
       const postCostPerPart = (postLaborCost + postMaterialCost) * postMultiplier;
