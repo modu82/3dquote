@@ -538,6 +538,26 @@ def save_quote_records(records: List[QuoteRecord]):
         json.dump([r.dict() for r in records], f, ensure_ascii=False, indent=2)
 
 
+def reassign_quote_owners(old_username: str, new_username: str) -> int:
+    """把报价记录的创建人从旧用户名迁移到新用户名，返回受影响的记录数。"""
+    if not old_username or not new_username or old_username == new_username:
+        return 0
+
+    records = load_quote_records()
+    updated_records: List[QuoteRecord] = []
+    changed = 0
+    for record in records:
+        if record.createdBy == old_username:
+            updated_records.append(record.copy(update={"createdBy": new_username}))
+            changed += 1
+        else:
+            updated_records.append(record)
+
+    if changed:
+        save_quote_records(updated_records)
+    return changed
+
+
 def create_session(username: str, role: str) -> str:
     token = uuid4().hex + secrets.token_hex(8)
     SESSIONS[token] = {"username": username, "role": role}
@@ -860,6 +880,7 @@ def account_change_username(
             updated_accounts.append(acc)
 
     _persist_accounts(updated_accounts)
+    reassign_quote_owners(account.username, new_username)
     invalidate_sessions_for(account.username)
     return {"message": "用户名已更新，请使用新用户名重新登录"}
 
