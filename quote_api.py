@@ -892,8 +892,9 @@ def create_quote_record(
     visibility = visibility or ("admin_only" if is_admin else "owner_only")
 
     existing = load_quote_records()
+    record_data = body.dict(exclude={"visibility", "adopted"})
     record = QuoteRecord(
-        **body.dict(),
+        **record_data,
         id=uuid4().hex,
         createdAt=datetime.utcnow().isoformat() + "Z",
         createdBy=session.get("username", "unknown"),
