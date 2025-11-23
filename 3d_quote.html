@@ -272,7 +272,7 @@
     }
     td input {
       width: 100%;
-      padding: 5px 6px;
+      padding: 7px 9px;
       font-size: 13px;
       border-radius: 6px;
       border: 1px solid #d0d0d5;
@@ -289,7 +289,7 @@
     }
     .mat-price-inputs input {
       width: 100%;
-      min-width: 0;
+      min-width: 120px;
     }
     .inline-config {
       display: grid;
@@ -397,38 +397,12 @@
       <div class="hint">不同账户对应不同权限：管理员登录后可管理配置、报价记录与用户；普通账号可进行报价计算。</div>
     </div>
 
-    <div class="login-panel" id="accountPanel" style="display:none;">
-      <h3>账户设置</h3>
-      <div class="login-row">
-        <div>
-          <label for="selfNewUsername">新用户名</label>
-          <input id="selfNewUsername" type="text" placeholder="输入新的用户名" />
-        </div>
-        <div>
-          <label for="selfUsernamePassword">当前密码</label>
-          <input id="selfUsernamePassword" type="password" placeholder="验证当前密码" />
-        </div>
-        <button type="button" id="selfChangeUsernameBtn">修改用户名</button>
-      </div>
-      <div class="login-row" style="margin-top:10px;">
-        <div>
-          <label for="selfOldPassword">当前密码</label>
-          <input id="selfOldPassword" type="password" placeholder="请输入当前密码" />
-        </div>
-        <div>
-          <label for="selfNewPassword">新密码</label>
-          <input id="selfNewPassword" type="password" placeholder="请输入新密码" />
-        </div>
-        <button type="button" id="selfChangePasswordBtn">修改密码</button>
-      </div>
-      <div class="hint">以上操作面向当前登录的账户，修改后将自动退出登录。</div>
-    </div>
-
     <div id="appContent" style="display:none;">
 
     <div class="page-tabs main-tabs">
       <button class="page-tab active" data-main="quoteMain">报价工作台</button>
       <button class="page-tab" data-main="recordsMain" style="display:none;">报价记录</button>
+      <button class="page-tab" data-main="accountMain" style="display:none;">账户设置</button>
       <button class="page-tab" data-main="adminMain" data-require-admin="true">管理中心</button>
     </div>
 
@@ -550,6 +524,37 @@
     </div> <!-- /quoteSection -->
     </div> <!-- /quoteMain -->
 
+    <div class="main-section" id="accountMain">
+      <div class="section active" id="accountSection">
+        <div class="login-panel" style="margin:0 0 10px;">
+          <h3>账户设置</h3>
+          <div class="login-row">
+            <div>
+              <label for="selfNewUsername">新用户名</label>
+              <input id="selfNewUsername" type="text" placeholder="输入新的用户名" />
+            </div>
+            <div>
+              <label for="selfUsernamePassword">当前密码</label>
+              <input id="selfUsernamePassword" type="password" placeholder="验证当前密码" />
+            </div>
+            <button type="button" id="selfChangeUsernameBtn">修改用户名</button>
+          </div>
+          <div class="login-row" style="margin-top:10px;">
+            <div>
+              <label for="selfOldPassword">当前密码</label>
+              <input id="selfOldPassword" type="password" placeholder="请输入当前密码" />
+            </div>
+            <div>
+              <label for="selfNewPassword">新密码</label>
+              <input id="selfNewPassword" type="password" placeholder="请输入新密码" />
+            </div>
+            <button type="button" id="selfChangePasswordBtn">修改密码</button>
+          </div>
+          <div class="hint">仅当前登录账户可见，修改后会自动退出登录以重新验证。</div>
+        </div>
+      </div>
+    </div>
+
     <div class="main-section" id="recordsMain">
       <div class="section active" id="recordsSection">
         <h3>报价记录</h3>
@@ -630,29 +635,12 @@
           <label for="configSetupFee">开机/调机费（元/订单）</label>
           <input id="configSetupFee" type="number" step="0.1" min="0" />
         </div>
-      </div>
-
-            <!-- 全局成本设置（新增） -->
-      <h3>全局成本设置</h3>
-      <small>用于计算设备小时成本：折旧 + 电费 + 人工 + 杂项。</small>
-      <div class="inline-config">
         <div>
           <label for="configElectricityPrice">电价（元 / kWh）</label>
           <input id="configElectricityPrice" type="number" step="0.01" min="0" />
         </div>
-        <div>
-          <label for="configLaborHourly">操作人工成本（元 / 小时）</label>
-          <input id="configLaborHourly" type="number" step="0.1" min="0" />
-        </div>
-        <div>
-          <label for="configMachinesPerOperator">每名操作员负责设备数量（台）</label>
-          <input id="configMachinesPerOperator" type="number" step="1" min="1" />
-        </div>
-        <div>
-          <label for="configOverheadPerMachine">杂项成本（元 / 台·小时）</label>
-          <input id="configOverheadPerMachine" type="number" step="0.1" min="0" />
-        </div>
       </div>
+
       <h4>按工艺的成本参数</h4>
       <div class="table-wrapper">
         <table>
@@ -757,8 +745,8 @@
         <button type="button" class="mini-btn" id="addMachineVendorBtn">添加厂商</button>
       </div>
       <small>
-        单位：元 / 小时。可以填写设备价格和折旧年限，点击“算”自动计算小时成本：<br />
-        简单公式：小时成本 ≈ 设备价格 ÷（年限 × 12 × 每月工作小时）。如需包含电费 / 人工等，可在算出的基础上手动微调。
+        单位：元 / 小时。请填写设备折旧/租赁成本，人工、电费、杂项会根据工艺成本参数和电价自动累加，避免重复计算。<br />
+        填写设备价格、折旧年限和每月工时后，点击“算”自动计算折旧小时成本。
       </small>
       <div class="table-wrapper">
         <table>
@@ -1029,12 +1017,26 @@
     }
 
     function getProcessCostConfig(processType) {
+      const laborInput = document.querySelector(`.process-cost-labor[data-process="${processType}"]`);
+      const mpoInput = document.querySelector(`.process-cost-mpo[data-process="${processType}"]`);
+      const ohInput = document.querySelector(`.process-cost-oh[data-process="${processType}"]`);
+      if (laborInput && mpoInput && ohInput) {
+        const labor = parseFloat(laborInput.value);
+        const mpo = parseFloat(mpoInput.value);
+        const oh = parseFloat(ohInput.value);
+        return {
+          laborHourlyCost: isNaN(labor) ? 0 : labor,
+          machinesPerOperator: isNaN(mpo) || mpo <= 0 ? 1 : mpo,
+          overheadHourlyPerMachine: isNaN(oh) ? 0 : oh,
+        };
+      }
+
       const costs = runtimeConfig.processCosts || {};
-      const fallback = costs[processType] || {};
+      const fallback = costs[processType] || CLIENT_DEFAULTS.processCosts?.[processType] || {};
       return {
-        laborHourlyCost: fallback.laborHourlyCost ?? runtimeConfig.laborHourlyCost ?? CLIENT_DEFAULTS.laborHourlyCost,
-        machinesPerOperator: fallback.machinesPerOperator ?? runtimeConfig.machinesPerOperator ?? CLIENT_DEFAULTS.machinesPerOperator,
-        overheadHourlyPerMachine: fallback.overheadHourlyPerMachine ?? runtimeConfig.overheadHourlyPerMachine ?? CLIENT_DEFAULTS.overheadHourlyPerMachine,
+        laborHourlyCost: fallback.laborHourlyCost ?? 0,
+        machinesPerOperator: fallback.machinesPerOperator ?? 1,
+        overheadHourlyPerMachine: fallback.overheadHourlyPerMachine ?? 0,
       };
     }
 
@@ -1291,18 +1293,14 @@
       const monthInput  = tr.querySelector(".mac-monthly");
       const powerInput  = tr.querySelector(".mac-power");
       const rateInput   = tr.querySelector(".mac-rate");
+      const processValue = tr.querySelector(".mac-process")?.value;
 
       const price  = parseFloat(priceInput.value);
       const life   = parseFloat(lifeInput.value);
       const monthH = parseFloat(monthInput.value);
       const power  = parseFloat(powerInput.value);
 
-      // 全局成本参数
       const elecPrice = parseFloat(document.getElementById("configElectricityPrice").value) || 0;
-      const laborCost = parseFloat(document.getElementById("configLaborHourly").value) || 0;
-      let machinesPerOp = parseFloat(document.getElementById("configMachinesPerOperator").value);
-      if (isNaN(machinesPerOp) || machinesPerOp <= 0) machinesPerOp = 1;
-      const overhead = parseFloat(document.getElementById("configOverheadPerMachine").value) || 0;
 
       if (
         isNaN(price) || price <= 0 ||
@@ -1317,13 +1315,16 @@
 
       const totalHours = life * 12 * monthH;
       const depreciation = price / totalHours;                 // 折旧
+      const electricity = (!isNaN(power) && power > 0) ? (power / 1000) * elecPrice : 0;
 
-      const elec = (!isNaN(power) && power > 0)
-        ? (power / 1000) * elecPrice                          // 功率 * 电价
-        : 0;
+      const rate  = depreciation;    // 设备折旧/租赁小时成本，人工/电费/杂项按工艺配置单独计入
 
-      const labor = laborCost / machinesPerOp;                 // 人工成本/台
-      const rate  = depreciation + elec + labor + overhead;    // 总小时成本
+      const processHint = processValue ? getProcessCostConfig(processValue) : null;
+      if (!silent && processHint) {
+        const labor = (processHint.laborHourlyCost || 0) / (processHint.machinesPerOperator || 1);
+        const msg = `已按折旧计算小时成本：¥${rate.toFixed(1)}，运行电费另加约 ¥${electricity.toFixed(2)} /小时，人工/杂项按工艺设置单独计入。`;
+        console.info(msg, labor >= 0 ? `（人工: ¥${labor.toFixed(2)}/台·时）` : "");
+      }
 
       rateInput.value = rate.toFixed(1);
     }
@@ -1908,9 +1909,6 @@
       document.getElementById("configMinPrice").value = runtimeConfig.defaultMinPricePerPart.toString();
       document.getElementById("configSetupFee").value = runtimeConfig.setupFee.toString();
       document.getElementById("configElectricityPrice").value = (runtimeConfig.electricityPrice ?? CLIENT_DEFAULTS.electricityPrice).toString();
-      document.getElementById("configLaborHourly").value = (runtimeConfig.laborHourlyCost ?? CLIENT_DEFAULTS.laborHourlyCost).toString();
-      document.getElementById("configMachinesPerOperator").value = (runtimeConfig.machinesPerOperator ?? CLIENT_DEFAULTS.machinesPerOperator).toString();
-      document.getElementById("configOverheadPerMachine").value = (runtimeConfig.overheadHourlyPerMachine ?? CLIENT_DEFAULTS.overheadHourlyPerMachine).toString();
       renderProcessCostRows();
 
       const customMarginInput = document.getElementById("customMargin");
@@ -1938,9 +1936,6 @@
           processType: m.processType ?? null
         }));
         runtimeConfig.electricityPrice = data.electricityPrice ?? CLIENT_DEFAULTS.electricityPrice;
-        runtimeConfig.laborHourlyCost = data.laborHourlyCost ?? CLIENT_DEFAULTS.laborHourlyCost;
-        runtimeConfig.machinesPerOperator =  data.machinesPerOperator ?? CLIENT_DEFAULTS.machinesPerOperator;
-        runtimeConfig.overheadHourlyPerMachine = data.overheadHourlyPerMachine ?? CLIENT_DEFAULTS.overheadHourlyPerMachine;
         runtimeConfig.processCosts = data.processCosts && Object.keys(data.processCosts).length
           ? data.processCosts
           : CLIENT_DEFAULTS.processCosts;
@@ -1990,13 +1985,14 @@
 
     function updateAuthUI() {
       const loginPanel = document.getElementById("loginPanel");
-      const accountPanel = document.getElementById("accountPanel");
       const appContent = document.getElementById("appContent");
       const statusEl = document.getElementById("userStatus");
       const logoutBtn = document.getElementById("userLogoutBtn");
       const adminTab = document.querySelector('.main-tabs .page-tab[data-main="adminMain"]');
       const adminMain = document.getElementById("adminMain");
       const recordsTab = document.querySelector('.main-tabs .page-tab[data-main="recordsMain"]');
+      const accountTab = document.querySelector('.main-tabs .page-tab[data-main="accountMain"]');
+      const accountMain = document.getElementById("accountMain");
       const recordsMain = document.getElementById("recordsMain");
       const recordVisibilitySelect = document.getElementById("recordVisibilitySelect");
       const recordVisibilityWrap = recordVisibilitySelect?.closest("div");
@@ -2005,7 +2001,6 @@
 
       const authed = isAuthenticated();
       if (loginPanel) loginPanel.style.display = authed ? "none" : "";
-      if (accountPanel) accountPanel.style.display = authed ? "" : "none";
       if (appContent) appContent.style.display = authed ? "" : "none";
       if (logoutBtn) logoutBtn.style.display = authed ? "" : "none";
 
@@ -2016,6 +2011,7 @@
       }
 
       if (adminTab) adminTab.style.display = isAdmin ? "" : "none";
+      if (accountTab) accountTab.style.display = authed ? "" : "none";
       const canSeeRecordsTab = authed && (isAdmin || canViewRecords);
       if (recordsTab) recordsTab.style.display = canSeeRecordsTab ? "" : "none";
       if (!isAdmin && adminTab?.classList.contains("active")) {
@@ -2024,11 +2020,17 @@
       if ((!authed || !canSeeRecordsTab) && recordsTab?.classList.contains("active")) {
         setMainTab(document.querySelector('.main-tabs .page-tab[data-main="quoteMain"]'));
       }
+      if (!authed && accountTab?.classList.contains("active")) {
+        setMainTab(document.querySelector('.main-tabs .page-tab[data-main="quoteMain"]'));
+      }
       if (adminMain) {
         adminMain.style.display = isAdmin ? "" : "none";
       }
       if (recordsMain) {
         recordsMain.style.display = canSeeRecordsTab ? "" : "none";
+      }
+      if (accountMain) {
+        accountMain.style.display = authed ? "" : "none";
       }
 
       if (recordVisibilitySelect) {
@@ -2593,41 +2595,11 @@
       let setupFee = parseFloat(document.getElementById("configSetupFee").value);
       if (isNaN(setupFee) || setupFee < 0) setupFee = 0;
 
-      /* ===== 新增：全局成本参数 + 简单前端校验 ===== */
-
-      // 1. 电价（元/kWh）
       const eleInput = document.getElementById("configElectricityPrice");
       let electricityPrice = parseFloat(eleInput?.value);
       if (isNaN(electricityPrice) || electricityPrice < 0) {
         alert("电价（元/kWh）请输入 0 或以上的数字");
         eleInput && eleInput.focus();
-        return;
-      }
-
-      // 2. 操作人工成本（元/小时）
-      const laborInput = document.getElementById("configLaborHourly");
-      let laborHourlyCost = parseFloat(laborInput?.value);
-      if (isNaN(laborHourlyCost) || laborHourlyCost < 0) {
-        alert("操作人工成本（元/小时）请输入 0 或以上的数字");
-        laborInput && laborInput.focus();
-        return;
-      }
-
-      // 3. 每人负责设备数量（台）
-      const mpoInput = document.getElementById("configMachinesPerOperator");
-      let machinesPerOperator = parseFloat(mpoInput?.value);
-      if (isNaN(machinesPerOperator) || machinesPerOperator <= 0) {
-        alert("每人负责设备数量请输入大于 0 的数字");
-        mpoInput && mpoInput.focus();
-        return;
-      }
-
-      // 4. 杂项成本（元/台·小时）
-      const ohInput = document.getElementById("configOverheadPerMachine");
-      let overheadHourlyPerMachine = parseFloat(ohInput?.value);
-      if (isNaN(overheadHourlyPerMachine) || overheadHourlyPerMachine < 0) {
-        alert("杂项成本（元/台·小时）请输入 0 或以上的数字");
-        ohInput && ohInput.focus();
         return;
       }
 
@@ -2641,6 +2613,9 @@
       const processCosts = getProcessCostsFromTable();
       if (!processCosts) return;
 
+      const firstProcessKey = Object.keys(processCosts)[0];
+      const fallbackProcessCost = firstProcessKey ? processCosts[firstProcessKey] : { laborHourlyCost: 0, machinesPerOperator: 1, overheadHourlyPerMachine: 0 };
+
       const payload = {
         materials,
         machines,
@@ -2648,9 +2623,9 @@
         defaultMinPricePerPart: minPrice,
         setupFee: setupFee,
         electricityPrice,
-        laborHourlyCost,
-        machinesPerOperator,
-        overheadHourlyPerMachine,
+        laborHourlyCost: fallbackProcessCost.laborHourlyCost,
+        machinesPerOperator: fallbackProcessCost.machinesPerOperator,
+        overheadHourlyPerMachine: fallbackProcessCost.overheadHourlyPerMachine,
         processCosts,
         postProcessRules
       };
@@ -3064,6 +3039,10 @@
               alert("当前账号无查看报价记录的权限，请联系管理员开启。");
               return;
             }
+          }
+          if (btn.dataset.main === "accountMain" && !isAuthenticated()) {
+            alert("请先登录后再进行账户设置。");
+            return;
           }
           setMainTab(btn);
         });
