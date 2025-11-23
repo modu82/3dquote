@@ -1,7 +1,8 @@
 from fastapi import FastAPI, HTTPException, Header, Request
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
-from typing import List, Optional, Dict
+from typing import List, Optional, Dict, Literal
+from datetime import datetime
 import json
 import os
 import hashlib
@@ -21,6 +22,7 @@ app.add_middleware(
 
 SETTINGS_FILE = "/data/settings.json"
 ACCOUNT_FILE = "/data/admin_account.json"
+QUOTES_FILE = "/data/quotes.json"
 
 # 初始管理员信息（如果 ACCOUNT_FILE 不存在，就用这个创建）
 DEFAULT_ADMIN_USER = os.getenv("ADMIN_USER", "admin")
@@ -34,7 +36,9 @@ SESSION_HEADER = "X-Admin-Session"
 class Material(BaseModel):
     vendor: str          # 厂商
     name: str            # 型号/材料名
-    pricePerKg: float    # 元 / kg
+    pricePerKg: Optional[float] = None    # 元 / kg（重量计价时必填）
+    pricePerCubicMeter: Optional[float] = None  # 元 / m³（体积计价时必填）
+    pricingMode: Literal["WEIGHT", "VOLUME"] = "WEIGHT"
     processType: Optional[str] = None  # 加工类型，None 视为通用
 
 
@@ -95,6 +99,31 @@ class ChangePasswordRequest(BaseModel):
     newPassword: str
 
 
+class QuoteRecordCreate(BaseModel):
+    processType: str
+    processLabel: Optional[str] = None
+    quantity: int
+    totalPrice: float
+    finalPricePerPart: float
+    costSumPerPart: float
+    profitMargin: float
+    materialCostPerPart: float
+    machineCostPerPart: float
+    postCostPerPart: float
+    setupCostPerPart: float
+    material: Dict
+    machine: Dict
+    postProcess: Dict
+    weight: Optional[float] = None
+    volume: Optional[float] = None
+    totalHours: Optional[float] = None
+
+
+class QuoteRecord(QuoteRecordCreate):
+    id: str
+    createdAt: str
+
+
 # ====== 默认配置 ======
 
 DEFAULT_SETTINGS = Settings(
@@ -104,8 +133,20 @@ DEFAULT_SETTINGS = Settings(
         Material(vendor="通用", name="ABS", pricePerKg=160, processType="FDM_3D_PRINT"),
         Material(vendor="通用", name="水洗树脂", pricePerKg=220, processType="RESIN_3D_PRINT"),
         Material(vendor="通用", name="高韧树脂", pricePerKg=260, processType="RESIN_3D_PRINT"),
-        Material(vendor="通用木料", name="桦木板", pricePerKg=35, processType="CNC_MILLING"),
-        Material(vendor="通用木料", name="樱桃木板", pricePerKg=65, processType="CNC_MILLING"),
+        Material(
+            vendor="通用木料",
+            name="桦木板",
+            pricingMode="VOLUME",
+            pricePerCubicMeter=3800,
+            processType="CNC_MILLING",
+        ),
+        Material(
+            vendor="通用木料",
+            name="樱桃木板",
+            pricingMode="VOLUME",
+            pricePerCubicMeter=5200,
+            processType="CNC_MILLING",
+        ),
         Material(vendor="通用板材", name="亚克力板", pricePerKg=45, processType="CO2_LASER_ENGRAVE_CUT"),
     ],
     machines=[
@@ -169,6 +210,12 @@ def _migrate_old_material(m: dict) -> Material:
         m["vendor"] = "未分类"
     if "processType" not in m:
         m["processType"] = None
+    if "pricingMode" not in m:
+        m["pricingMode"] = "WEIGHT"
+    if m.get("pricingMode") == "WEIGHT" and "pricePerKg" not in m:
+        m["pricePerKg"] = 0
+    if m.get("pricingMode") == "VOLUME" and "pricePerCubicMeter" not in m:
+        m["pricePerCubicMeter"] = 0
     return Material(**m)
 
 
@@ -284,6 +331,30 @@ ADMIN_ACCOUNT: AdminAccount = load_admin_account()
 SESSIONS: Dict[str, str] = {}  # token -> username
 
 
+def load_quote_records() -> List[QuoteRecord]:
+    if not os.path.exists(QUOTES_FILE):
+        return []
+    try:
+        with open(QUOTES_FILE, "r", encoding="utf-8") as f:
+            data = json.load(f)
+        records = []
+        for item in data:
+            try:
+                records.append(QuoteRecord(**item))
+            except Exception:
+                continue
+        return records
+    except Exception as e:
+        print("Failed to load quotes:", e)
+        return []
+
+
+def save_quote_records(records: List[QuoteRecord]):
+    os.makedirs(os.path.dirname(QUOTES_FILE), exist_ok=True)
+    with open(QUOTES_FILE, "w", encoding="utf-8") as f:
+        json.dump([r.dict() for r in records], f, ensure_ascii=False, indent=2)
+
+
 def create_session(username: str) -> str:
     token = uuid4().hex + secrets.token_hex(8)
     SESSIONS[token] = username
@@ -382,3 +453,83 @@ def admin_change_password(body: ChangePasswordRequest, x_admin_session: Optional
     SESSIONS.clear()
 
     return {"message": "密码已更新，请使用新密码重新登录"}
+
+
+# ====== 报价记录：创建 / 查询 / 统计 ======
+
+
+@app.post("/api/quotes", response_model=QuoteRecord)
+def create_quote_record(body: QuoteRecordCreate):
+    """保存一次报价结果，用于后续对账和统计。"""
+    existing = load_quote_records()
+    record = QuoteRecord(
+        **body.dict(),
+        id=uuid4().hex,
+        createdAt=datetime.utcnow().isoformat() + "Z",
+    )
+    existing.append(record)
+    save_quote_records(existing)
+    return record
+
+
+@app.get("/api/quotes")
+def list_quote_records(
+    page: int = 1,
+    pageSize: int = 20,
+    month: Optional[str] = None,  # 形如 2024-03
+    x_admin_session: Optional[str] = Header(None),
+):
+    """分页查询报价记录，支持按月份过滤，需管理员登录。"""
+    require_admin(x_admin_session)
+    page = max(page, 1)
+    pageSize = min(max(pageSize, 1), 200)
+    all_records = load_quote_records()
+    if month:
+        filtered = []
+        for r in all_records:
+            try:
+                ts = datetime.fromisoformat(r.createdAt.replace("Z", "+00:00"))
+                if ts.strftime("%Y-%m") == month:
+                    filtered.append(r)
+            except Exception:
+                continue
+        all_records = filtered
+    total = len(all_records)
+    start = (page - 1) * pageSize
+    end = start + pageSize
+    slice_records = all_records[start:end]
+    return {
+        "total": total,
+        "page": page,
+        "pageSize": pageSize,
+        "items": [r.dict() for r in slice_records],
+    }
+
+
+@app.get("/api/quotes/summary")
+def quote_summary(
+    year: Optional[int] = None,
+    x_admin_session: Optional[str] = Header(None),
+):
+    """按月份汇总报价数量与金额。需管理员登录。"""
+    require_admin(x_admin_session)
+    records = load_quote_records()
+    summary: Dict[str, Dict[str, float]] = {}
+    for r in records:
+        try:
+            ts = datetime.fromisoformat(r.createdAt.replace("Z", "+00:00"))
+        except Exception:
+            continue
+        if year and ts.year != year:
+            continue
+        key = ts.strftime("%Y-%m")
+        if key not in summary:
+            summary[key] = {"count": 0, "amount": 0.0}
+        summary[key]["count"] += 1
+        summary[key]["amount"] += float(r.totalPrice)
+    # 排序输出
+    items = [
+        {"month": k, "count": v["count"], "amount": round(v["amount"], 2)}
+        for k, v in sorted(summary.items())
+    ]
+    return {"items": items}

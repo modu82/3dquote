@@ -61,6 +61,9 @@
 - `POST /api/admin/logout`：注销当前会话。
 - `GET /api/admin/status`：查询 session 是否有效。
 - `POST /api/admin/change-password`：修改管理员密码，需有效会话并提供旧密码。
+- `POST /api/quotes`：保存一次报价记录，便于后续统计（对所有用户开放）。
+- `GET /api/quotes`：管理员查看报价记录，支持分页与按月份筛选。
+- `GET /api/quotes/summary`：管理员查看按月汇总的报价数量与金额。
 
 配置持久化文件位于 `./data/settings.json` 与 `./data/admin_account.json`，可备份或通过 Docker 卷挂载到其他路径。
 

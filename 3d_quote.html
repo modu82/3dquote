@@ -269,6 +269,44 @@
       width: 100%;
       overflow-x: auto;
     }
+    .page-tabs {
+      display: flex;
+      gap: 10px;
+      margin-bottom: 12px;
+      flex-wrap: wrap;
+    }
+    .page-tab {
+      padding: 8px 14px;
+      border-radius: 999px;
+      border: 1px solid #d0d0d5;
+      background: #f7f7f9;
+      cursor: pointer;
+      font-size: 13px;
+    }
+    .page-tab.active {
+      background: #0070f3;
+      color: #fff;
+      border-color: #0070f3;
+    }
+    .section { display: none; }
+    .section.active { display: block; }
+    .pager {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      font-size: 13px;
+      margin: 6px 0 10px;
+      flex-wrap: wrap;
+    }
+    .pager button { padding: 5px 10px; border-radius: 8px; }
+    .record-card {
+      background: #fafafa;
+      border: 1px solid #eee;
+      border-radius: 12px;
+      padding: 12px;
+      margin-bottom: 10px;
+      font-size: 13px;
+    }
   </style>
 </head>
 <body>
@@ -281,6 +319,14 @@
 
     <h1>通用加工报价计算器</h1>
     <div class="subtitle">根据工艺选择对应材料与设备，快速估算成本与利润</div>
+
+    <div class="page-tabs">
+      <button class="page-tab active" data-section="quoteSection">报价计算</button>
+      <button class="page-tab" data-section="settingsSection">参数配置</button>
+      <button class="page-tab" data-section="recordsSection">报价记录</button>
+    </div>
+
+    <div class="section active" id="quoteSection">
 
     <!-- 报价表单 -->
     <form id="quote-form">
@@ -305,6 +351,12 @@
           <label for="weight">单件耗材重量（g）</label>
           <input id="weight" type="number" step="0.01" min="0" required />
           <div class="hint">支持到 0.01 g（从切片软件中查看耗材用量）。</div>
+        </div>
+
+        <div>
+          <label for="volume">单件材料体积（cm³）</label>
+          <input id="volume" type="number" step="0.01" min="0" />
+          <div class="hint">当材料按体积计价（如木材）时使用此值；非体积材料可留空。</div>
         </div>
 
         <!-- 打印时间与设备 -->
@@ -377,8 +429,10 @@
       <div class="result-detail" id="result-detail"></div>
     </div>
 
+    </div> <!-- /quoteSection -->
+
     <!-- 管理员设置区域（登录后可见） -->
-    <div class="settings" id="settingsSection" style="display:none;">
+    <div class="settings section" id="settingsSection">
       <h3>
         全局参数
         <div>
@@ -463,15 +517,27 @@
         <input id="newMaterialVendorInput" type="text" placeholder="新厂商名称" />
         <button type="button" class="mini-btn" id="addMaterialVendorBtn">添加厂商</button>
       </div>
-      <small>单位：元 / kg。这里的内容会同步到上面的材料厂商/型号下拉框。</small>
+      <small>按计价模式填写单价：重量（元/kg）或体积（元/m³），内容会同步到上方下拉框。</small>
+      <div class="pager">
+        <label>每页显示</label>
+        <select id="materialsPageSize">
+          <option value="5">5</option>
+          <option value="10">10</option>
+          <option value="20">20</option>
+        </select>
+        <button type="button" class="mini-btn" id="materialsPrev">上一页</button>
+        <span id="materialsPageInfo"></span>
+        <button type="button" class="mini-btn" id="materialsNext">下一页</button>
+      </div>
       <div class="table-wrapper">
         <table>
           <thead>
             <tr>
-              <th style="width:18%; min-width:140px;">厂商</th>
-              <th style="width:16%; min-width:140px;">工艺</th>
-              <th style="width:32%; min-width:200px;">材料名称</th>
-              <th style="width:20%; min-width:140px;">单价（元 / kg）</th>
+              <th style="width:16%; min-width:120px;">厂商</th>
+              <th style="width:14%; min-width:120px;">工艺</th>
+              <th style="width:26%; min-width:180px;">材料名称</th>
+              <th style="width:14%; min-width:120px;">计价模式</th>
+              <th style="width:18%; min-width:160px;">单价</th>
               <th style="width:12%; min-width:90px;">操作</th>
             </tr>
           </thead>
@@ -502,6 +568,17 @@
         单位：元 / 小时。可以填写设备价格和折旧年限，点击“算”自动计算小时成本：<br />
         简单公式：小时成本 ≈ 设备价格 ÷（年限 × 12 × 每月工作小时）。如需包含电费 / 人工等，可在算出的基础上手动微调。
       </small>
+      <div class="pager">
+        <label>每页显示</label>
+        <select id="machinesPageSize">
+          <option value="5">5</option>
+          <option value="10">10</option>
+          <option value="20">20</option>
+        </select>
+        <button type="button" class="mini-btn" id="machinesPrev">上一页</button>
+        <span id="machinesPageInfo"></span>
+        <button type="button" class="mini-btn" id="machinesNext">下一页</button>
+      </div>
       <div class="table-wrapper">
         <table>
           <thead>
@@ -524,6 +601,33 @@
         -
         <button id="addMachineBtn" class="btn-sub">新增设备</button>
       </h3>
+    </div>
+
+    <div class="section" id="recordsSection">
+      <h3>报价记录</h3>
+      <small>需要管理员登录后查看和统计；每次计算完成会自动保存一条记录。</small>
+      <div class="inline-config">
+        <div>
+          <label for="recordsMonth">按月份筛选</label>
+          <input id="recordsMonth" type="month" />
+        </div>
+        <div>
+          <label for="recordsPageSize">每页显示</label>
+          <select id="recordsPageSize">
+            <option value="5">5</option>
+            <option value="10">10</option>
+            <option value="20">20</option>
+          </select>
+        </div>
+      </div>
+      <div class="pager">
+        <button type="button" class="mini-btn" id="recordsPrev">上一页</button>
+        <span id="recordsPageInfo"></span>
+        <button type="button" class="mini-btn" id="recordsNext">下一页</button>
+      </div>
+      <div id="recordsList"></div>
+      <h4>月度汇总</h4>
+      <div id="recordsSummary"></div>
     </div>
   </div>
 
@@ -552,16 +656,16 @@
       overheadHourlyPerMachine: 0,    // 杂项成本 元/台·小时
 
       materials: [
-        { vendor: "通用", name: "PLA", pricePerKg: 120, processType: "FDM_3D_PRINT" },
-        { vendor: "通用", name: "PETG", pricePerKg: 150, processType: "FDM_3D_PRINT" },
-        { vendor: "通用", name: "ABS", pricePerKg: 160, processType: "FDM_3D_PRINT" },
-        { vendor: "通用", name: "水洗树脂", pricePerKg: 220, processType: "RESIN_3D_PRINT" },
-        { vendor: "通用", name: "高韧树脂", pricePerKg: 260, processType: "RESIN_3D_PRINT" },
-        { vendor: "通用木料", name: "桦木板", pricePerKg: 35, processType: "CNC_MILLING" },
-        { vendor: "通用木料", name: "樱桃木板", pricePerKg: 65, processType: "CNC_MILLING" },
-        { vendor: "通用石材", name: "人造石板", pricePerKg: 55, processType: "CNC_MILLING" },
-        { vendor: "通用石材", name: "花岗岩毛坯", pricePerKg: 95, processType: "CNC_MILLING" },
-        { vendor: "通用板材", name: "亚克力板", pricePerKg: 45, processType: "CO2_LASER_ENGRAVE_CUT" }
+        { vendor: "通用", name: "PLA", pricePerKg: 120, processType: "FDM_3D_PRINT", pricingMode: "WEIGHT" },
+        { vendor: "通用", name: "PETG", pricePerKg: 150, processType: "FDM_3D_PRINT", pricingMode: "WEIGHT" },
+        { vendor: "通用", name: "ABS", pricePerKg: 160, processType: "FDM_3D_PRINT", pricingMode: "WEIGHT" },
+        { vendor: "通用", name: "水洗树脂", pricePerKg: 220, processType: "RESIN_3D_PRINT", pricingMode: "WEIGHT" },
+        { vendor: "通用", name: "高韧树脂", pricePerKg: 260, processType: "RESIN_3D_PRINT", pricingMode: "WEIGHT" },
+        { vendor: "通用木料", name: "桦木板", pricingMode: "VOLUME", pricePerCubicMeter: 3800, processType: "CNC_MILLING" },
+        { vendor: "通用木料", name: "樱桃木板", pricingMode: "VOLUME", pricePerCubicMeter: 5200, processType: "CNC_MILLING" },
+        { vendor: "通用石材", name: "人造石板", pricePerKg: 55, processType: "CNC_MILLING", pricingMode: "WEIGHT" },
+        { vendor: "通用石材", name: "花岗岩毛坯", pricePerKg: 95, processType: "CNC_MILLING", pricingMode: "WEIGHT" },
+        { vendor: "通用板材", name: "亚克力板", pricePerKg: 45, processType: "CO2_LASER_ENGRAVE_CUT", pricingMode: "WEIGHT" }
       ],
       machines: [
         { vendor: "Bambu Lab", name: "A1/桌面机", hourlyRate: 10, price: null, expectedLifeYears: null, expectedMonthlyHours: null, processType: "FDM_3D_PRINT" },
@@ -581,6 +685,9 @@
     let lastQuote = null;
 
     const ADMIN_SESSION_KEY = "quote_admin_session";
+    const MATERIALS_PAGE_SIZE_KEY = "quote_materials_page_size";
+    const MACHINES_PAGE_SIZE_KEY = "quote_machines_page_size";
+    const RECORDS_PAGE_SIZE_KEY = "quote_records_page_size";
     let adminSessionToken = localStorage.getItem(ADMIN_SESSION_KEY) || null;
     let isAdmin = false;
     let adminUsername = "";
@@ -590,6 +697,12 @@
     let currentProcessType = PROCESS_TYPES[0].value;
     let currentMaterialsProcessFilter = PROCESS_FILTER_ALL;
     let currentMachinesProcessFilter = PROCESS_FILTER_ALL;
+    let materialsPage = 1;
+    let machinesPage = 1;
+    let materialsPageSize = parseInt(localStorage.getItem(MATERIALS_PAGE_SIZE_KEY) || "10", 10);
+    let machinesPageSize = parseInt(localStorage.getItem(MACHINES_PAGE_SIZE_KEY) || "10", 10);
+    let recordsPage = 1;
+    let recordsPageSize = parseInt(localStorage.getItem(RECORDS_PAGE_SIZE_KEY) || "10", 10);
 
     function formatMoney(v) {
       return "¥" + v.toFixed(2);
@@ -685,15 +798,27 @@
       rows.forEach(row => {
         const vendorInput = row.querySelector(".mat-vendor");
         const nameInput = row.querySelector(".mat-name");
-        const priceInput = row.querySelector(".mat-price");
+        const priceWeightInput = row.querySelector(".mat-price-weight");
+        const priceVolumeInput = row.querySelector(".mat-price-volume");
+        const pricingSelect = row.querySelector(".mat-pricing");
         const processSelect = row.querySelector(".mat-process");
         const vendor = (vendorInput.value || "").trim() || "未分类";
         const name = (nameInput.value || "").trim();
-        const price = parseFloat(priceInput.value);
+        const priceWeight = parseFloat(priceWeightInput.value);
+        const priceVolume = parseFloat(priceVolumeInput.value);
+        const pricingMode = pricingSelect?.value === "VOLUME" ? "VOLUME" : "WEIGHT";
         const processType = processSelect?.value || UNIVERSAL_PROCESS_VALUE;
         const normalizedProcess = processType === UNIVERSAL_PROCESS_VALUE ? null : processType;
-        if (name && !isNaN(price) && price >= 0) {
-          arr.push({ vendor, name, pricePerKg: price, processType: normalizedProcess });
+        const validPrice = pricingMode === "VOLUME" ? priceVolume : priceWeight;
+        if (name && !isNaN(validPrice) && validPrice >= 0) {
+          arr.push({
+            vendor,
+            name,
+            pricingMode,
+            pricePerKg: pricingMode === "WEIGHT" ? validPrice : null,
+            pricePerCubicMeter: pricingMode === "VOLUME" ? validPrice : null,
+            processType: normalizedProcess
+          });
         }
       });
       return arr;
@@ -786,7 +911,14 @@
 
 
     // ===== 材料 / 设备：表格构造 =====
-    function appendMaterialRow(vendor = "", name = "", pricePerKg = "", processType = "FDM_3D_PRINT") {
+    function appendMaterialRow(
+      vendor = "",
+      name = "",
+      pricePerKg = "",
+      processType = "FDM_3D_PRINT",
+      pricingMode = "WEIGHT",
+      pricePerCubicMeter = ""
+    ) {
       const tbody = document.getElementById("materialsTableBody");
       const tr = document.createElement("tr");
       tr.innerHTML = `
@@ -795,22 +927,54 @@
           <select class="mat-process"></select>
         </td>
         <td><input type="text" class="mat-name" value="${name}"></td>
-        <td><input type="number" class="mat-price" step="0.1" min="0" value="${pricePerKg}"></td>
+        <td>
+          <select class="mat-pricing">
+            <option value="WEIGHT">按重量（元/kg）</option>
+            <option value="VOLUME">按体积（元/m³）</option>
+          </select>
+        </td>
+        <td>
+          <input type="number" class="mat-price-weight" step="0.1" min="0" value="${pricePerKg}">
+          <input type="number" class="mat-price-volume" step="0.1" min="0" value="${pricePerCubicMeter}" style="display:none;" title="元/立方米">
+          <div class="hint mat-price-hint" style="margin-top:4px;">按重量：元/kg</div>
+        </td>
         <td><button type="button" class="mini-btn mat-delete">删</button></td>
       `;
       tbody.appendChild(tr);
 
       renderProcessOptions(tr.querySelector(".mat-process"), processType || UNIVERSAL_PROCESS_VALUE, { includeUniversal: true });
 
+      const pricingSelect = tr.querySelector(".mat-pricing");
+      pricingSelect.value = pricingMode === "VOLUME" ? "VOLUME" : "WEIGHT";
+      function syncMaterialPriceInputs() {
+        const mode = pricingSelect.value;
+        const weightInput = tr.querySelector(".mat-price-weight");
+        const volumeInput = tr.querySelector(".mat-price-volume");
+        const hint = tr.querySelector(".mat-price-hint");
+        if (mode === "VOLUME") {
+          weightInput.style.display = "none";
+          volumeInput.style.display = "inline-block";
+          hint.textContent = "按体积：元/m³";
+        } else {
+          weightInput.style.display = "inline-block";
+          volumeInput.style.display = "none";
+          hint.textContent = "按重量：元/kg";
+        }
+      }
+      syncMaterialPriceInputs();
+      pricingSelect.addEventListener("change", () => syncMaterialPriceInputs());
+
       tr.querySelector(".mat-delete").addEventListener("click", () => {
         tr.remove();
         rebuildMaterialsVendorFilter();
         rebuildMaterialOptions();
+        applyMaterialsPagination();
       });
       tr.querySelectorAll("input, select").forEach(input => {
         input.addEventListener("input", () => {
           rebuildMaterialsVendorFilter();
           rebuildMaterialOptions();
+          applyMaterialsPagination();
         });
       });
     }
@@ -898,6 +1062,7 @@
         tr.remove();
         rebuildMachinesVendorFilter();
         rebuildMachineOptions();
+        applyMachinesPagination();
       });
 
       // “算”按钮（调用我们前面写的计算小时成本函数）
@@ -911,6 +1076,7 @@
           rebuildMachinesVendorFilter();
           rebuildMachineOptions();
           // 注意：这里只刷新 UI，不自动覆盖小时成本，避免你手动改被覆盖
+          applyMachinesPagination();
         });
       });
     }
@@ -978,16 +1144,6 @@
       const allowed = [VENDOR_FILTER_ALL, ...vendors];
       currentMaterialsVendor = allowed.includes(prev) ? prev : VENDOR_FILTER_ALL;
       select.value = currentMaterialsVendor;
-
-      // 只显示当前工艺的行；当厂商为“全部厂商”时显示所有匹配工艺的行
-      rows.forEach(row => {
-        const vInput = row.querySelector(".mat-vendor");
-        const pSelect = row.querySelector(".mat-process");
-        const rowProcess = pSelect?.value || UNIVERSAL_PROCESS_VALUE;
-        const v = (vInput.value || "").trim() || "未分类";
-        const vendorHit = currentMaterialsVendor === VENDOR_FILTER_ALL || v === currentMaterialsVendor;
-        row.style.display = vendorHit && matchesProcessFilter(rowProcess, processFilter) ? "" : "none";
-      });
     }
 
     function rebuildMachinesVendorFilter() {
@@ -1022,36 +1178,103 @@
       const allowed = [VENDOR_FILTER_ALL, ...vendors];
       currentMachinesVendor = allowed.includes(prev) ? prev : VENDOR_FILTER_ALL;
       select.value = currentMachinesVendor;
+    }
 
+    function applyMaterialsPagination() {
+      const rows = Array.from(document.querySelectorAll("#materialsTableBody tr"));
+      const processFilter = document.getElementById("materialsProcessFilter")?.value || PROCESS_FILTER_ALL;
+      const totalMatched = rows.filter(row => {
+        const vInput = row.querySelector(".mat-vendor");
+        const pSelect = row.querySelector(".mat-process");
+        const rowProcess = pSelect?.value || UNIVERSAL_PROCESS_VALUE;
+        const v = (vInput?.value || "").trim() || "未分类";
+        const vendorHit = currentMaterialsVendor === VENDOR_FILTER_ALL || v === currentMaterialsVendor;
+        return vendorHit && matchesProcessFilter(rowProcess, processFilter);
+      }).length;
+      const totalPages = Math.max(1, Math.ceil(totalMatched / materialsPageSize));
+      if (materialsPage > totalPages) materialsPage = totalPages;
+      let currentIndex = 0;
+      rows.forEach(row => {
+        const vInput = row.querySelector(".mat-vendor");
+        const pSelect = row.querySelector(".mat-process");
+        const rowProcess = pSelect?.value || UNIVERSAL_PROCESS_VALUE;
+        const v = (vInput?.value || "").trim() || "未分类";
+        const vendorHit = currentMaterialsVendor === VENDOR_FILTER_ALL || v === currentMaterialsVendor;
+        const match = vendorHit && matchesProcessFilter(rowProcess, processFilter);
+        if (!match) {
+          row.style.display = "none";
+          return;
+        }
+        const pageStart = (materialsPage - 1) * materialsPageSize;
+        const pageEnd = pageStart + materialsPageSize;
+        row.style.display = currentIndex >= pageStart && currentIndex < pageEnd ? "" : "none";
+        currentIndex += 1;
+      });
+      const info = document.getElementById("materialsPageInfo");
+      if (info) info.textContent = `${materialsPage}/${totalPages}（共 ${totalMatched} 条）`;
+      const pageSizeSelect = document.getElementById("materialsPageSize");
+      if (pageSizeSelect) pageSizeSelect.value = materialsPageSize.toString();
+    }
+
+    function applyMachinesPagination() {
+      const rows = Array.from(document.querySelectorAll("#machinesTableBody tr"));
+      const processFilter = document.getElementById("machinesProcessFilter")?.value || PROCESS_FILTER_ALL;
+      const totalMatched = rows.filter(row => {
+        const vInput = row.querySelector(".mac-vendor");
+        const pSelect = row.querySelector(".mac-process");
+        const rowProcess = pSelect?.value || UNIVERSAL_PROCESS_VALUE;
+        const v = (vInput?.value || "").trim() || "未分类";
+        const vendorHit = currentMachinesVendor === VENDOR_FILTER_ALL || v === currentMachinesVendor;
+        return vendorHit && matchesProcessFilter(rowProcess, processFilter);
+      }).length;
+      const totalPages = Math.max(1, Math.ceil(totalMatched / machinesPageSize));
+      if (machinesPage > totalPages) machinesPage = totalPages;
+      let currentIndex = 0;
       rows.forEach(row => {
         const vInput = row.querySelector(".mac-vendor");
         const pSelect = row.querySelector(".mac-process");
         const rowProcess = pSelect?.value || UNIVERSAL_PROCESS_VALUE;
-        const v = (vInput.value || "").trim() || "未分类";
+        const v = (vInput?.value || "").trim() || "未分类";
         const vendorHit = currentMachinesVendor === VENDOR_FILTER_ALL || v === currentMachinesVendor;
-        row.style.display = vendorHit && matchesProcessFilter(rowProcess, processFilter) ? "" : "none";
+        const match = vendorHit && matchesProcessFilter(rowProcess, processFilter);
+        if (!match) {
+          row.style.display = "none";
+          return;
+        }
+        const pageStart = (machinesPage - 1) * machinesPageSize;
+        const pageEnd = pageStart + machinesPageSize;
+        row.style.display = currentIndex >= pageStart && currentIndex < pageEnd ? "" : "none";
+        currentIndex += 1;
       });
+      const info = document.getElementById("machinesPageInfo");
+      if (info) info.textContent = `${machinesPage}/${totalPages}（共 ${totalMatched} 条）`;
+      const pageSizeSelect = document.getElementById("machinesPageSize");
+      if (pageSizeSelect) pageSizeSelect.value = machinesPageSize.toString();
     }
 
     document.getElementById("materialsVendorFilter").addEventListener("change", () => {
       currentMaterialsVendor = document.getElementById("materialsVendorFilter").value;
       rebuildMaterialsVendorFilter();
       rebuildMaterialOptions();
+      applyMaterialsPagination();
     });
     document.getElementById("materialsProcessFilter").addEventListener("change", () => {
       currentMaterialsProcessFilter = document.getElementById("materialsProcessFilter").value;
       rebuildMaterialsVendorFilter();
       rebuildMaterialOptions();
+      applyMaterialsPagination();
     });
     document.getElementById("machinesVendorFilter").addEventListener("change", () => {
       currentMachinesVendor = document.getElementById("machinesVendorFilter").value;
       rebuildMachinesVendorFilter();
       rebuildMachineOptions();
+      applyMachinesPagination();
     });
     document.getElementById("machinesProcessFilter").addEventListener("change", () => {
       currentMachinesProcessFilter = document.getElementById("machinesProcessFilter").value;
       rebuildMachinesVendorFilter();
       rebuildMachineOptions();
+      applyMachinesPagination();
     });
 
     document.getElementById("addMaterialVendorBtn").addEventListener("click", () => {
@@ -1063,7 +1286,7 @@
       input.value = "";
 
       // ⭐ 新增：自动添加一行材料，避免空 vendor 无数据
-      appendMaterialRow(name, "", "", getCurrentProcessType());
+      appendMaterialRow(name, "", "", getCurrentProcessType(), "WEIGHT", "");
 
       rebuildMaterialsVendorFilter();
       rebuildMaterialOptions();
@@ -1083,6 +1306,71 @@
 
       rebuildMachinesVendorFilter();
       rebuildMachineOptions();
+    });
+
+    // 分页控制
+    const materialsPageSizeSelect = document.getElementById("materialsPageSize");
+    materialsPageSizeSelect.value = materialsPageSize.toString();
+    materialsPageSizeSelect.addEventListener("change", () => {
+      materialsPageSize = parseInt(materialsPageSizeSelect.value, 10) || 10;
+      localStorage.setItem(MATERIALS_PAGE_SIZE_KEY, materialsPageSize.toString());
+      materialsPage = 1;
+      applyMaterialsPagination();
+    });
+    document.getElementById("materialsPrev").addEventListener("click", () => {
+      if (materialsPage > 1) {
+        materialsPage -= 1;
+        applyMaterialsPagination();
+      }
+    });
+    document.getElementById("materialsNext").addEventListener("click", () => {
+      materialsPage += 1;
+      applyMaterialsPagination();
+    });
+
+    const machinesPageSizeSelect = document.getElementById("machinesPageSize");
+    machinesPageSizeSelect.value = machinesPageSize.toString();
+    machinesPageSizeSelect.addEventListener("change", () => {
+      machinesPageSize = parseInt(machinesPageSizeSelect.value, 10) || 10;
+      localStorage.setItem(MACHINES_PAGE_SIZE_KEY, machinesPageSize.toString());
+      machinesPage = 1;
+      applyMachinesPagination();
+    });
+    document.getElementById("machinesPrev").addEventListener("click", () => {
+      if (machinesPage > 1) {
+        machinesPage -= 1;
+        applyMachinesPagination();
+      }
+    });
+    document.getElementById("machinesNext").addEventListener("click", () => {
+      machinesPage += 1;
+      applyMachinesPagination();
+    });
+
+    const recordsPageSizeSelect = document.getElementById("recordsPageSize");
+    if (recordsPageSizeSelect) {
+      recordsPageSizeSelect.value = recordsPageSize.toString();
+      recordsPageSizeSelect.addEventListener("change", () => {
+        recordsPageSize = parseInt(recordsPageSizeSelect.value, 10) || 10;
+        localStorage.setItem(RECORDS_PAGE_SIZE_KEY, recordsPageSize.toString());
+        recordsPage = 1;
+        renderQuoteRecords();
+      });
+    }
+    document.getElementById("recordsPrev")?.addEventListener("click", () => {
+      if (recordsPage > 1) {
+        recordsPage -= 1;
+        renderQuoteRecords();
+      }
+    });
+    document.getElementById("recordsNext")?.addEventListener("click", () => {
+      recordsPage += 1;
+      renderQuoteRecords();
+    });
+    document.getElementById("recordsMonth")?.addEventListener("change", () => {
+      recordsPage = 1;
+      renderQuoteRecords();
+      renderQuoteSummary();
     });
 
 
@@ -1198,8 +1486,10 @@
       runtimeConfig.materials.forEach(m => appendMaterialRow(
         m.vendor,
         m.name,
-        m.pricePerKg,
-        m.processType || UNIVERSAL_PROCESS_VALUE
+        m.pricePerKg ?? "",
+        m.processType || UNIVERSAL_PROCESS_VALUE,
+        m.pricingMode || "WEIGHT",
+        m.pricePerCubicMeter ?? ""
       ));
       runtimeConfig.machines.forEach(m => {
         appendMachineRow(
@@ -1232,6 +1522,8 @@
       rebuildMaterialOptions();
       rebuildMachineOptions();
       rebuildPostProcessOptions();
+      applyMaterialsPagination();
+      applyMachinesPagination();
 
       document.getElementById("configProfitMargin").value = (runtimeConfig.defaultProfitMargin * 100).toFixed(0);
       document.getElementById("configMinPrice").value = runtimeConfig.defaultMinPricePerPart.toString();
@@ -1280,15 +1572,18 @@
     // ===== 管理员登录 / 状态 =====
     function updateAdminUI() {
       const settingsSection = document.getElementById("settingsSection");
+      const recordsSection = document.getElementById("recordsSection");
       const adminBtn = document.getElementById("adminAuthBtn");
       const adminNameSpan = document.getElementById("adminName");
 
       if (isAdmin) {
         settingsSection.style.display = "";
+        if (recordsSection) recordsSection.style.display = "";
         adminBtn.textContent = "退出登录";
         adminNameSpan.textContent = adminUsername ? `已登录：${adminUsername}` : "已登录";
       } else {
         settingsSection.style.display = "none";
+        if (recordsSection) recordsSection.style.display = "none";
         adminBtn.textContent = "管理员登录";
         adminNameSpan.textContent = "";
       }
@@ -1322,6 +1617,110 @@
         adminUsername = "";
       }
       updateAdminUI();
+      if (isAdmin) {
+        renderQuoteRecords();
+        renderQuoteSummary();
+      }
+    }
+
+    async function fetchQuoteRecords() {
+      const month = document.getElementById("recordsMonth")?.value || "";
+      const params = new URLSearchParams({ page: String(recordsPage), pageSize: String(recordsPageSize) });
+      if (month) params.append("month", month);
+      const resp = await fetch(`${API_BASE}/quotes?${params.toString()}`, {
+        headers: adminSessionToken ? { "X-Admin-Session": adminSessionToken } : {}
+      });
+      if (!resp.ok) throw new Error("无法获取报价记录，请确认已登录管理员");
+      return resp.json();
+    }
+
+    async function fetchQuoteSummary() {
+      const now = new Date();
+      const resp = await fetch(`${API_BASE}/quotes/summary?year=${now.getFullYear()}`, {
+        headers: adminSessionToken ? { "X-Admin-Session": adminSessionToken } : {}
+      });
+      if (!resp.ok) throw new Error("无法获取汇总，请确认已登录管理员");
+      return resp.json();
+    }
+
+    async function renderQuoteRecords() {
+      const listEl = document.getElementById("recordsList");
+      const infoEl = document.getElementById("recordsPageInfo");
+      if (!listEl) return;
+      listEl.textContent = "加载中...";
+      try {
+        const data = await fetchQuoteRecords();
+        listEl.innerHTML = "";
+        if (Array.isArray(data.items) && data.items.length) {
+          data.items.forEach(item => {
+            const div = document.createElement("div");
+            div.className = "record-card";
+            div.innerHTML = `
+              <div><strong>${item.processLabel || item.processType}</strong> · ${new Date(item.createdAt).toLocaleString()}</div>
+              <div>材料：${item.material?.vendor || ''} / ${item.material?.name || ''}</div>
+              <div>单价：${formatMoney(item.finalPricePerPart)} × 数量 ${item.quantity} = ${formatMoney(item.totalPrice)}</div>
+            `;
+            listEl.appendChild(div);
+          });
+        } else {
+          listEl.textContent = "暂无记录";
+        }
+        if (infoEl) infoEl.textContent = `${data.page}/${Math.max(1, Math.ceil((data.total || 0) / data.pageSize || 1))}（共 ${data.total || 0} 条）`;
+      } catch (e) {
+        listEl.textContent = e.message || "获取记录失败";
+        if (infoEl) infoEl.textContent = "";
+      }
+    }
+
+    async function renderQuoteSummary() {
+      const summaryEl = document.getElementById("recordsSummary");
+      if (!summaryEl) return;
+      summaryEl.textContent = "加载中...";
+      try {
+        const data = await fetchQuoteSummary();
+        if (Array.isArray(data.items) && data.items.length) {
+          const lines = data.items.map(item => `${item.month}: ${item.count} 单 · ${formatMoney(item.amount)}`);
+          summaryEl.innerHTML = lines.join("<br>");
+        } else {
+          summaryEl.textContent = "暂无数据";
+        }
+      } catch (e) {
+        summaryEl.textContent = e.message || "获取汇总失败";
+      }
+    }
+
+    async function persistQuoteResult(quote) {
+      try {
+        await fetch(`${API_BASE}/quotes`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            processType: quote.processType,
+            processLabel: quote.processLabel,
+            quantity: quote.quantity,
+            totalPrice: quote.totalPrice,
+            finalPricePerPart: quote.finalPricePerPart,
+            costSumPerPart: quote.costSumPerPart,
+            profitMargin: quote.profitMargin,
+            materialCostPerPart: quote.materialCostPerPart,
+            machineCostPerPart: quote.machineCostPerPart,
+            postCostPerPart: quote.postCostPerPart,
+            setupCostPerPart: quote.setupCostPerPart,
+            material: quote.material,
+            machine: quote.machine,
+            postProcess: quote.post,
+            weight: quote.weight,
+            volume: quote.volume,
+            totalHours: quote.totalHours,
+          })
+        });
+        if (isAdmin) {
+          renderQuoteRecords();
+          renderQuoteSummary();
+        }
+      } catch (e) {
+        console.warn("保存报价记录失败", e);
+      }
     }
 
     async function adminLoginFlow() {
@@ -1542,7 +1941,7 @@
     document.getElementById("changePasswordBtn").addEventListener("click", changeAdminPassword);
     document.getElementById("addMaterialBtn").addEventListener("click", () => {
       const vendor = currentMaterialsVendor || "未分类";
-      appendMaterialRow(vendor, "", "", getCurrentProcessType());
+      appendMaterialRow(vendor, "", "", getCurrentProcessType(), "WEIGHT", "");
       rebuildMaterialsVendorFilter();
       rebuildMaterialOptions();
     });
@@ -1589,6 +1988,11 @@
       }
 
       const weight = parseFloat(document.getElementById("weight").value) || 0;
+      const volume = parseFloat(document.getElementById("volume").value) || 0;
+      if (material.pricingMode === "VOLUME" && volume <= 0) {
+        alert("当前材料按体积计价，请填写有效的体积。");
+        return;
+      }
 
       const days = parseFloat(document.getElementById("printDays").value) || 0;
       const hours = parseFloat(document.getElementById("printHours").value) || 0;
@@ -1615,7 +2019,9 @@
         ? (parseFloat(customMinInput) || 0)
         : runtimeConfig.defaultMinPricePerPart;
 
-      const materialCostPerPart = (weight / 1000) * material.pricePerKg;
+      const materialCostPerPart = material.pricingMode === "VOLUME"
+        ? ((volume / 1000000) * (material.pricePerCubicMeter || 0))
+        : ((weight / 1000) * (material.pricePerKg || 0));
       const machineCostPerPart = totalHours * machine.hourlyRate;
       const totalPostMinutes = (post.baseMinutes || 0) + (post.minutesPerGram || 0) * weight;
       const postLaborCost = (runtimeConfig.laborHourlyCost || 0) * totalPostMinutes / 60;
@@ -1629,6 +2035,13 @@
       const finalPricePerPart = Math.max(withProfitPerPart, minPricePerPart);
       const totalPrice = finalPricePerPart * quantity;
 
+      const materialPriceLabel = material.pricingMode === "VOLUME"
+        ? `${material.pricePerCubicMeter ?? 0} 元/m³`
+        : `${material.pricePerKg ?? 0} 元/kg`;
+      const materialUsageLabel = material.pricingMode === "VOLUME"
+        ? `${volume.toFixed(2)} cm³`
+        : `${weight.toFixed(2)} g`;
+
       const resultEl = document.getElementById("result");
       const resultTotalEl = document.getElementById("result-total");
       const resultDetailEl = document.getElementById("result-detail");
@@ -1637,8 +2050,8 @@
 
       const lines = [
         `▶ 加工类型：${processLabel}`,
-        `▶ 材料：${material.vendor} / ${material.name}  ${material.pricePerKg} 元/kg`,
-        `   - 单件耗材：${weight.toFixed(2)} g → 材料成本：${formatMoney(materialCostPerPart)}`,
+        `▶ 材料：${material.vendor} / ${material.name}  ${materialPriceLabel}`,
+        `   - 单件耗材：${materialUsageLabel} → 材料成本：${formatMoney(materialCostPerPart)}`,
         `▶ 设备：${machine.vendor} / ${machine.name}  ${machine.hourlyRate} 元/小时`,
         `   - 单件打印时间：${days} 天 ${hours} 小时 ${minutes} 分钟 ≈ ${totalHours.toFixed(2)} 小时`,
         `   - 设备成本：${formatMoney(machineCostPerPart)}`,
@@ -1663,6 +2076,7 @@
         machine,
         post,
         weight,
+        volume,
         days,
         hours,
         minutes,
@@ -1685,6 +2099,8 @@
         processType,
         processLabel
       };
+
+      persistQuoteResult(lastQuote);
     });
 
     document.getElementById("resetBtn").addEventListener("click", () => {
@@ -1707,8 +2123,8 @@
         `加工类型：${lastQuote.processLabel}`,
         "",
         `材料：${lastQuote.material.vendor} / ${lastQuote.material.name}`,
-        `材料单价：${lastQuote.material.pricePerKg} 元/kg`,
-        `单件耗材：${lastQuote.weight.toFixed(2)} g`,
+        `材料单价：${lastQuote.material.pricingMode === "VOLUME" ? `${lastQuote.material.pricePerCubicMeter} 元/m³` : `${lastQuote.material.pricePerKg} 元/kg`}`,
+        `单件耗材：${lastQuote.material.pricingMode === "VOLUME" ? `${lastQuote.volume.toFixed(2)} cm³` : `${lastQuote.weight.toFixed(2)} g`}`,
         `材料成本（单件）：${formatMoney(lastQuote.materialCostPerPart)}`,
         "",
         `设备：${lastQuote.machine.vendor} / ${lastQuote.machine.name}`,
@@ -1748,6 +2164,16 @@
 
     // ===== 页面初始化 =====
     window.addEventListener("DOMContentLoaded", async () => {
+      document.querySelectorAll(".page-tab").forEach(btn => {
+        btn.addEventListener("click", () => {
+          document.querySelectorAll(".page-tab").forEach(b => b.classList.remove("active"));
+          document.querySelectorAll(".section").forEach(sec => sec.classList.remove("active"));
+          btn.classList.add("active");
+          const id = btn.getAttribute("data-section");
+          const target = document.getElementById(id);
+          if (target) target.classList.add("active");
+        });
+      });
       initProcessTypeSelector();
       await loadSettingsFromServer();
       await checkAdminStatus();
