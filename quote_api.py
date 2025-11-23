@@ -921,15 +921,18 @@ def list_quote_records(
     """分页查询报价记录，支持按月份、创建人、采用状态与可见性过滤。"""
     session = require_authenticated(x_user_session, x_admin_session, x_session)
     account = get_account(session.get("username", ""))
-    if session.get("role") != "admin" and (not account or not account.canViewRecords):
-        raise HTTPException(status_code=403, detail="无权查看报价记录")
-    if session.get("role") != "admin":
-        visibility = None
+    is_admin = session.get("role") == "admin"
+    if not is_admin and not (account and account.canViewRecords):
+        creator = session.get("username")
+        visibility = "owner_only"
+        adopted = None
+    if not is_admin:
+        visibility = None if account and account.canViewRecords else visibility
     page = max(page, 1)
     pageSize = min(max(pageSize, 1), 200)
     all_records = load_quote_records()
 
-    if session.get("role") != "admin":
+    if not is_admin:
         allowed = []
         for r in all_records:
             if r.visibility == "all_users":
@@ -1008,16 +1011,23 @@ def update_quote_record(
     x_user_session: Optional[str] = Header(None),
     x_session: Optional[str] = Header(None),
 ):
-    require_admin(x_admin_session, x_user_session, x_session)
+    session = require_authenticated(x_user_session, x_admin_session, x_session)
+    username = session.get("username")
+    is_admin = session.get("role") == "admin"
     records = load_quote_records()
     updated_records: List[QuoteRecord] = []
     target: Optional[QuoteRecord] = None
     for r in records:
         if r.id == quote_id:
+            is_owner = r.createdBy == username
+            if not is_admin and not is_owner:
+                raise HTTPException(status_code=403, detail="无权修改该记录")
             visibility = r.visibility
             if body.visibility in ("admin_only", "all_users", "owner_only"):
                 visibility = body.visibility
-            adopted = r.adopted if body.adopted is None else bool(body.adopted)
+            if not is_admin and visibility == "admin_only":
+                visibility = "owner_only"
+            adopted = r.adopted if (body.adopted is None or not is_admin) else bool(body.adopted)
             updated = QuoteRecord(**{**r.dict(), "visibility": visibility, "adopted": adopted})
             updated_records.append(updated)
             target = updated
@@ -1036,10 +1046,21 @@ def delete_quote_record(
     x_user_session: Optional[str] = Header(None),
     x_session: Optional[str] = Header(None),
 ):
-    require_admin(x_admin_session, x_user_session, x_session)
+    session = require_authenticated(x_user_session, x_admin_session, x_session)
+    username = session.get("username")
+    is_admin = session.get("role") == "admin"
     records = load_quote_records()
-    remaining = [r for r in records if r.id != quote_id]
-    if len(remaining) == len(records):
+    remaining: List[QuoteRecord] = []
+    deleted = False
+    for r in records:
+        if r.id != quote_id:
+            remaining.append(r)
+            continue
+        is_owner = r.createdBy == username
+        if not is_admin and not is_owner:
+            raise HTTPException(status_code=403, detail="无权删除该记录")
+        deleted = True
+    if not deleted:
         raise HTTPException(status_code=404, detail="记录不存在")
     save_quote_records(remaining)
     return {"deleted": quote_id}
