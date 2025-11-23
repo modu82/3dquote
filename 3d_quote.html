@@ -254,14 +254,13 @@
     }
     .material-price-wrap {
       display: flex;
-      align-items: center;
-      flex-wrap: wrap;
-      gap: 8px;
+      flex-direction: column;
+      gap: 2px;
       min-width: 0;
     }
     .material-price-wrap .mat-price-volume,
     .material-price-wrap .mat-price-weight {
-      flex: 1 1 120px;
+      width: 100%;
       min-width: 0;
       height: 36px;
       line-height: 36px;
@@ -277,12 +276,10 @@
     }
     .material-price-hint {
       margin-top: 0;
-      color: #6b7280;
+      color: #888;
+      min-height: 18px;
       font-size: 12px;
       line-height: 18px;
-      display: inline-flex;
-      align-items: center;
-      white-space: nowrap;
     }
     .material-unit {
       font-size: 14px;
@@ -789,7 +786,7 @@
               <th style="width:14%; min-width:140px;">工艺</th>
               <th style="width:20%; min-width:180px;">材料名称</th>
               <th style="width:14%; min-width:150px;">计价模式</th>
-              <th style="width:14%; min-width:150px;">单价</th>
+              <th style="width:16%; min-width:170px;">单价</th>
               <th style="width:10%; min-width:90px;">单位</th>
               <th style="width:6%; min-width:80px;">操作</th>
             </tr>
