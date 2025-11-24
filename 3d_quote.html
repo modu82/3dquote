@@ -386,6 +386,35 @@
       margin-bottom: 10px;
       font-size: 13px;
     }
+    .modal-overlay {
+      position: fixed;
+      inset: 0;
+      background: rgba(0,0,0,0.45);
+      display: none;
+      align-items: center;
+      justify-content: center;
+      z-index: 999;
+    }
+    .modal {
+      background: #fff;
+      border-radius: 12px;
+      padding: 18px;
+      width: min(640px, 92%);
+      box-shadow: 0 20px 40px rgba(0,0,0,0.15);
+    }
+    .modal-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 10px;
+    }
+    .modal-actions {
+      display: flex;
+      gap: 8px;
+      justify-content: flex-end;
+      margin-top: 12px;
+    }
+    .badge.gray { background: #e5e7eb; color: #111827; }
   </style>
 </head>
   <body>
@@ -397,8 +426,48 @@
       <div class="auth-meta" id="userStatus">请先登录后使用报价功能。</div>
       <div class="auth-actions">
         <button type="button" class="mini-btn" id="userLogoutBtn" style="display:none;">退出登录</button>
+    </div>
+  </div>
+
+  <div class="modal-overlay" id="projectModal">
+    <div class="modal">
+      <div class="modal-header">
+        <h3 id="projectModalTitle">新建项目</h3>
+        <button type="button" class="mini-btn" id="projectModalClose">关闭</button>
+      </div>
+      <div class="grid" style="grid-template-columns: repeat(2, 1fr);">
+        <div>
+          <label for="projectModalName">项目名称</label>
+          <input id="projectModalName" type="text" placeholder="必填" />
+        </div>
+        <div>
+          <label for="projectModalClient">客户名称</label>
+          <input id="projectModalClient" type="text" placeholder="可选" />
+        </div>
+        <div>
+          <label for="projectModalCode">项目编号 / 内部编码</label>
+          <input id="projectModalCode" type="text" placeholder="可选" />
+        </div>
+        <div>
+          <label for="projectModalStatus">项目状态</label>
+          <select id="projectModalStatus">
+            <option value="">未指定</option>
+            <option value="ongoing">进行中</option>
+            <option value="completed">已完成</option>
+            <option value="canceled">已取消</option>
+          </select>
+        </div>
+        <div style="grid-column: 1 / span 2;">
+          <label for="projectModalRemark">备注说明</label>
+          <input id="projectModalRemark" type="text" placeholder="可选" />
+        </div>
+      </div>
+      <div class="modal-actions">
+        <button type="button" class="secondary" id="projectModalCancel">取消</button>
+        <button type="button" id="projectModalSubmit">保存</button>
       </div>
     </div>
+  </div>
 
     <div class="login-panel" id="loginPanel">
       <h3>登录后开始使用</h3>
@@ -435,6 +504,16 @@
           <label for="processType">加工类型</label>
           <select id="processType"></select>
           <div class="hint">选择工艺后，下方材料和设备列表将按工艺自动筛选。</div>
+        </div>
+        <div>
+          <label for="projectSelect">所属项目</label>
+          <select id="projectSelect"></select>
+          <div class="vendor-filter" style="padding:0;">
+            <input id="projectSearch" type="text" placeholder="输入名称/客户搜索" />
+            <button type="button" class="mini-btn" id="projectSearchBtn">搜索</button>
+            <button type="button" class="mini-btn" id="projectNewBtn">新建项目</button>
+          </div>
+          <div class="hint">建议在报价前关联项目，便于后续归档与统计；可为空表示未关联。</div>
         </div>
         <!-- 材料选择：厂商 + 型号 -->
         <div>
@@ -588,6 +667,10 @@
             <select id="recordsCreatorFilter"></select>
           </div>
           <div>
+            <label for="recordsProjectFilter">项目</label>
+            <select id="recordsProjectFilter"></select>
+          </div>
+          <div>
             <label for="recordsAdoptedFilter">是否采用</label>
             <select id="recordsAdoptedFilter">
               <option value="all">全部</option>
@@ -629,6 +712,7 @@
         <button class="page-tab active" data-section="paramsSection">参数配置</button>
         <button class="page-tab" data-section="materialsSection">材料设置</button>
         <button class="page-tab" data-section="machinesSection">设备设置</button>
+        <button class="page-tab" data-section="projectSection">项目管理</button>
         <button class="page-tab" data-section="userManagementSection">用户管理</button>
       </div>
 
@@ -641,6 +725,8 @@
           <button type="button" class="mini-btn" id="importSettingsBtn">导入备份/配置</button>
           <button type="button" class="mini-btn" id="backupSettingsBtn">备份当前配置</button>
           <button type="button" class="mini-btn" id="restoreBackupBtn">恢复备份配置</button>
+          <button type="button" class="mini-btn" id="backupFullBtn">备份全部数据</button>
+          <button type="button" class="mini-btn" id="restoreFullBtn">恢复全部数据</button>
           <button type="button" class="mini-btn" id="restoreFactoryBtn">恢复出厂设置</button>
           <button type="button" class="mini-btn" id="saveSettingsBtn">保存设置到服务器</button>
         </div>
@@ -810,6 +896,33 @@
       </h3>
     </div>
 
+    <div class="settings section admin-sub-section" id="projectSection" data-require-admin="true">
+      <h3 style="display:flex;justify-content:space-between;align-items:center;">
+        项目管理
+        <button type="button" class="mini-btn" id="projectCreateBtn">新建项目</button>
+      </h3>
+      <div class="vendor-filter">
+        <input id="projectAdminSearch" type="text" placeholder="按名称/客户/编号搜索" />
+        <button type="button" class="mini-btn" id="projectAdminSearchBtn">搜索</button>
+        <button type="button" class="mini-btn" id="projectAdminResetBtn">重置</button>
+      </div>
+      <div class="table-wrapper">
+        <table>
+          <thead>
+            <tr>
+              <th style="width:20%;">名称</th>
+              <th style="width:16%;">客户</th>
+              <th style="width:16%;">编号</th>
+              <th style="width:12%;">状态</th>
+              <th style="width:22%;">备注</th>
+              <th style="width:14%;">操作</th>
+            </tr>
+          </thead>
+          <tbody id="projectTableBody"></tbody>
+        </table>
+      </div>
+    </div>
+
     <div class="section admin-sub-section" id="userManagementSection">
       <h3>用户管理</h3>
       <small>仅管理员可见：新增普通用户或管理员，重置密码、启用/禁用账号，并配置报价记录权限。</small>
@@ -955,9 +1068,13 @@
     let recordsPageSize = parseInt(localStorage.getItem(RECORDS_PAGE_SIZE_KEY) || "10", 10);
     let recordsMaxPage = 1;
     let recordsCreatorFilter = "";
+    let recordsProjectFilter = "";
     let recordsAdoptedFilter = "all";
     let recordsVisibilityFilter = "all";
     let recordVisibilitySelection = "owner_only";
+    let cachedProjects = [];
+    let projectSearchKeyword = "";
+    let editingProjectId = null;
 
     function formatMoney(v) {
       return "¥" + v.toFixed(2);
@@ -1041,6 +1158,150 @@
       });
       const allowed = [PROCESS_FILTER_ALL, ...PROCESS_TYPES.map(pt => pt.value)];
       selectEl.value = allowed.includes(value) ? value : PROCESS_FILTER_ALL;
+    }
+
+    async function fetchProjects(keyword = "") {
+      if (!isAuthenticated()) throw new Error("请先登录后再获取项目");
+      const params = new URLSearchParams();
+      if (keyword) params.append("keyword", keyword);
+      const resp = await fetch(`${API_BASE}/projects?${params.toString()}`, { headers: authHeaders() });
+      if (!resp.ok) throw new Error("无法获取项目列表");
+      return resp.json();
+    }
+
+    function populateProjectOptions(selectEl, includeEmpty = true, selected = "", emptyLabel = "未关联项目") {
+      if (!selectEl) return;
+      selectEl.innerHTML = "";
+      if (includeEmpty) {
+        const opt = document.createElement("option");
+        opt.value = "";
+        opt.textContent = emptyLabel;
+        selectEl.appendChild(opt);
+      }
+      cachedProjects.forEach(p => {
+        const opt = document.createElement("option");
+        opt.value = p.id;
+        opt.textContent = p.name;
+        selectEl.appendChild(opt);
+      });
+      const allowed = Array.from(selectEl.options).map(o => o.value);
+      selectEl.value = allowed.includes(selected) ? selected : "";
+    }
+
+    async function refreshProjects(keyword = projectSearchKeyword) {
+      if (!isAuthenticated()) {
+        cachedProjects = [];
+        populateProjectOptions(document.getElementById("projectSelect"));
+        populateProjectOptions(document.getElementById("recordsProjectFilter"), true, "", "全部项目");
+        return [];
+      }
+      projectSearchKeyword = keyword || "";
+      cachedProjects = await fetchProjects(projectSearchKeyword);
+      populateProjectOptions(document.getElementById("projectSelect"), true, document.getElementById("projectSelect")?.value || "");
+      populateProjectOptions(document.getElementById("recordsProjectFilter"), true, recordsProjectFilter, "全部项目");
+      renderProjectTable();
+      return cachedProjects;
+    }
+
+    function openProjectModal(project = null) {
+      const overlay = document.getElementById("projectModal");
+      if (!overlay) return;
+      editingProjectId = project?.id || null;
+      document.getElementById("projectModalTitle").textContent = project ? "编辑项目" : "新建项目";
+      document.getElementById("projectModalName").value = project?.name || "";
+      document.getElementById("projectModalClient").value = project?.clientName || "";
+      document.getElementById("projectModalCode").value = project?.code || "";
+      document.getElementById("projectModalStatus").value = project?.status || "";
+      document.getElementById("projectModalRemark").value = project?.remark || "";
+      overlay.style.display = "flex";
+    }
+
+    function closeProjectModal() {
+      const overlay = document.getElementById("projectModal");
+      if (overlay) overlay.style.display = "none";
+      editingProjectId = null;
+    }
+
+    async function submitProjectModal() {
+      const name = document.getElementById("projectModalName").value.trim();
+      const clientName = document.getElementById("projectModalClient").value.trim();
+      const code = document.getElementById("projectModalCode").value.trim();
+      const status = document.getElementById("projectModalStatus").value;
+      const remark = document.getElementById("projectModalRemark").value.trim();
+      if (!name) {
+        alert("项目名称不能为空");
+        return;
+      }
+      const payload = { name, clientName, code, status, remark };
+      try {
+        let resp;
+        if (editingProjectId) {
+          resp = await fetch(`${API_BASE}/projects/${editingProjectId}`, {
+            method: "PUT",
+            headers: { "Content-Type": "application/json", ...authHeaders() },
+            body: JSON.stringify(payload)
+          });
+        } else {
+          resp = await fetch(`${API_BASE}/projects`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json", ...authHeaders() },
+            body: JSON.stringify(payload)
+          });
+        }
+        const data = await resp.json().catch(() => ({}));
+        if (!resp.ok) throw new Error(data.detail || "保存失败");
+        await refreshProjects();
+        if (!editingProjectId) {
+          const select = document.getElementById("projectSelect");
+          if (select) select.value = data.id;
+        }
+        closeProjectModal();
+      } catch (e) {
+        alert(e.message || "保存失败");
+      }
+    }
+
+    async function deleteProject(id) {
+      if (!id) return;
+      if (!window.confirm("确定删除该项目吗？删除后不可恢复。")) return;
+      try {
+        const resp = await fetch(`${API_BASE}/projects/${id}`, { method: "DELETE", headers: authHeaders() });
+        const data = await resp.json().catch(() => ({}));
+        if (!resp.ok) throw new Error(data.detail || "删除失败");
+        await refreshProjects();
+      } catch (e) {
+        alert(e.message || "删除失败");
+      }
+    }
+
+    function renderProjectTable() {
+      const tbody = document.getElementById("projectTableBody");
+      if (!tbody) return;
+      if (!isAdmin) {
+        tbody.innerHTML = "<tr><td colspan='6'>仅管理员可管理项目</td></tr>";
+        return;
+      }
+      if (!cachedProjects.length) {
+        tbody.innerHTML = "<tr><td colspan='6'>暂无项目</td></tr>";
+        return;
+      }
+      const statusMap = { ongoing: "进行中", completed: "已完成", canceled: "已取消" };
+      tbody.innerHTML = "";
+      cachedProjects.forEach(p => {
+        const tr = document.createElement("tr");
+        tr.innerHTML = `
+          <td>${p.name}</td>
+          <td>${p.clientName || "-"}</td>
+          <td>${p.code || "-"}</td>
+          <td>${statusMap[p.status] || "-"}</td>
+          <td>${p.remark || "-"}</td>
+          <td>
+            <button type=\"button\" class=\"mini-btn\" data-action=\"edit\" data-id=\"${p.id}\">编辑</button>
+            <button type=\"button\" class=\"mini-btn\" data-action=\"delete\" data-id=\"${p.id}\">删除</button>
+          </td>
+        `;
+        tbody.appendChild(tr);
+      });
     }
 
     function getProcessCostConfig(processType) {
@@ -1775,6 +2036,14 @@
       renderQuoteRecords();
       renderQuoteSummary();
     });
+    const recordsProjectSelect = document.getElementById("recordsProjectFilter");
+    if (recordsProjectSelect) {
+      recordsProjectSelect.addEventListener("change", () => {
+        recordsProjectFilter = recordsProjectSelect.value;
+        recordsPage = 1;
+        renderQuoteRecords();
+      });
+    }
 
 
     // ===== 报价区域下拉：根据当前表格重建 options =====
@@ -2174,6 +2443,9 @@
         await loadSettingsFromServer();
       }
       if (isAuthenticated()) {
+        await refreshProjects();
+      }
+      if (isAuthenticated()) {
         renderQuoteRecords();
       }
       if (isAdmin) {
@@ -2187,6 +2459,7 @@
       const params = new URLSearchParams({ page: String(recordsPage), pageSize: String(recordsPageSize) });
       if (month) params.append("month", month);
       if (recordsCreatorFilter) params.append("creator", recordsCreatorFilter);
+      if (recordsProjectFilter) params.append("projectId", recordsProjectFilter);
       if (recordsAdoptedFilter !== "all") params.append("adopted", recordsAdoptedFilter === "true");
       if (isAdmin && recordsVisibilityFilter !== "all") params.append("visibility", recordsVisibilityFilter);
       const resp = await fetch(`${API_BASE}/quotes?${params.toString()}`, {
@@ -2265,6 +2538,7 @@
             div.innerHTML = `
               <div><strong>${item.processLabel || item.processType}</strong> · ${new Date(item.createdAt).toLocaleString()}</div>
               <div>${createdLabel} · 可见：${visibilityLabel} · 状态：${adoptedLabel}</div>
+              <div>项目：${item.projectName || "未关联"}</div>
               <div>材料：${item.material?.vendor || ''} / ${item.material?.name || ''}</div>
               <div>单价：${formatMoney(item.finalPricePerPart)} × 数量 ${item.quantity} = ${formatMoney(item.totalPrice)}</div>
             `;
@@ -2538,6 +2812,9 @@
         const recordVisibility = isAdmin
           ? (document.getElementById("recordVisibilitySelect")?.value || "admin_only")
           : "owner_only";
+        const projectSelect = document.getElementById("projectSelect");
+        const projectId = projectSelect?.value || "";
+        const projectName = cachedProjects.find(p => p.id === projectId)?.name || "";
         const resp = await fetch(`${API_BASE}/quotes`, {
           method: "POST",
           headers: { "Content-Type": "application/json", ...authHeaders() },
@@ -2559,6 +2836,8 @@
             weight: quote.weight,
             volume: quote.volume,
             totalHours: quote.totalHours,
+            projectId: projectId || null,
+            projectName: projectName || undefined,
             visibility: recordVisibility
           })
         });
@@ -2627,6 +2906,9 @@
       isAdmin = false;
       localStorage.removeItem(SESSION_KEY);
       settingsLoaded = false;
+      cachedProjects = [];
+      populateProjectOptions(document.getElementById("projectSelect"));
+      populateProjectOptions(document.getElementById("recordsProjectFilter"), true, "", "全部项目");
       updateAuthUI();
     }
 
@@ -2831,6 +3113,41 @@
       }
     }
 
+    async function backupAllData() {
+      if (!isAdmin || !sessionToken) {
+        alert("请先以管理员身份登录。");
+        return;
+      }
+      try {
+        const resp = await fetch(`${API_BASE}/backup/full`, { method: "POST", headers: authHeaders() });
+        if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+        alert("已完成全量备份（含配置、用户、项目与报价记录）。");
+      } catch (e) {
+        alert(`全量备份失败：${e.message}`);
+      }
+    }
+
+    async function restoreAllData() {
+      if (!isAdmin || !sessionToken) {
+        alert("请先以管理员身份登录。");
+        return;
+      }
+      if (!window.confirm("确定要恢复全量备份吗？当前配置、用户、项目与报价记录都会被覆盖。")) return;
+      try {
+        const resp = await fetch(`${API_BASE}/backup/full/restore`, { method: "POST", headers: authHeaders() });
+        const data = await resp.json().catch(() => ({}));
+        if (!resp.ok) throw new Error(data.detail || `HTTP ${resp.status}`);
+        if (data.settings) {
+          applySettingsToRuntime(data.settings);
+          initSettingsFromRuntime();
+        }
+        alert("已从全量备份恢复全部数据，请重新登录以刷新权限与会话。");
+        await logoutFlow();
+      } catch (e) {
+        alert(`恢复全量备份失败：${e.message}`);
+      }
+    }
+
     async function restoreFactorySettings() {
       if (!isAdmin || !sessionToken) {
         alert("请先以管理员身份登录。");
@@ -2938,6 +3255,8 @@
     document.getElementById("exportSettingsBtn").addEventListener("click", exportCurrentSettings);
     document.getElementById("backupSettingsBtn").addEventListener("click", backupCurrentSettings);
     document.getElementById("restoreBackupBtn").addEventListener("click", restoreBackupSettings);
+    document.getElementById("backupFullBtn").addEventListener("click", backupAllData);
+    document.getElementById("restoreFullBtn").addEventListener("click", restoreAllData);
     document.getElementById("restoreFactoryBtn").addEventListener("click", restoreFactorySettings);
     document.getElementById("changePasswordBtn").addEventListener("click", changeAdminPassword);
     document.getElementById("saveSettingsBtnMaterials").addEventListener("click", saveSettingsToServer);
@@ -2960,6 +3279,43 @@
       appendPostProcessRow();
       rebuildPostProcessOptions();
     });
+
+    document.getElementById("projectSearchBtn")?.addEventListener("click", () => {
+      const kw = document.getElementById("projectSearch")?.value || "";
+      refreshProjects(kw);
+    });
+    document.getElementById("projectSearch")?.addEventListener("keypress", (e) => {
+      if (e.key === "Enter") {
+        e.preventDefault();
+        document.getElementById("projectSearchBtn")?.click();
+      }
+    });
+    document.getElementById("projectNewBtn")?.addEventListener("click", () => openProjectModal());
+    document.getElementById("projectCreateBtn")?.addEventListener("click", () => openProjectModal());
+    document.getElementById("projectAdminSearchBtn")?.addEventListener("click", () => {
+      const kw = document.getElementById("projectAdminSearch")?.value || "";
+      refreshProjects(kw);
+    });
+    document.getElementById("projectAdminResetBtn")?.addEventListener("click", () => {
+      const input = document.getElementById("projectAdminSearch");
+      if (input) input.value = "";
+      refreshProjects("");
+    });
+    document.getElementById("projectTableBody")?.addEventListener("click", (e) => {
+      const btn = e.target.closest("button[data-action]");
+      if (!btn) return;
+      const id = btn.getAttribute("data-id");
+      const action = btn.getAttribute("data-action");
+      const project = cachedProjects.find(p => p.id === id);
+      if (action === "edit" && project) {
+        openProjectModal(project);
+      } else if (action === "delete") {
+        deleteProject(id);
+      }
+    });
+    document.getElementById("projectModalSubmit")?.addEventListener("click", submitProjectModal);
+    document.getElementById("projectModalClose")?.addEventListener("click", closeProjectModal);
+    document.getElementById("projectModalCancel")?.addEventListener("click", closeProjectModal);
 
     document.getElementById("createUserBtn").addEventListener("click", createUser);
     document.getElementById("userTableBody").addEventListener("click", (e) => {
@@ -3259,6 +3615,9 @@
           }
           if (targetId === "userManagementSection") {
             renderUserTable();
+          }
+          if (targetId === "projectSection") {
+            refreshProjects();
           }
         });
       });

@@ -22,10 +22,12 @@ app.add_middleware(
 
 SETTINGS_FILE = "/data/settings.json"
 SETTINGS_BACKUP_FILE = "/data/settings.backup.json"
+FULL_BACKUP_FILE = "/data/full_backup.json"
 ACCOUNT_FILE = "/data/admin_account.json"
 USER_ACCOUNT_FILE = "/data/user_account.json"
 ACCOUNTS_FILE = "/data/accounts.json"
 QUOTES_FILE = "/data/quotes.json"
+PROJECTS_FILE = "/data/projects.json"
 
 # 初始管理员信息（如果 ACCOUNT_FILE 不存在，就用这个创建）
 DEFAULT_ADMIN_USER = os.getenv("ADMIN_USER", "admin")
@@ -138,6 +140,8 @@ class QuoteRecordCreate(BaseModel):
     material: Dict
     machine: Dict
     postProcess: Dict
+    projectId: Optional[str] = None
+    projectName: Optional[str] = None
     weight: Optional[float] = None
     volume: Optional[float] = None
     totalHours: Optional[float] = None
@@ -154,6 +158,27 @@ class QuoteRecord(QuoteRecordCreate):
 class QuoteRecordUpdate(BaseModel):
     visibility: Optional[Literal["admin_only", "all_users", "owner_only"]] = None
     adopted: Optional[bool] = None
+
+
+class Project(BaseModel):
+    id: str
+    name: str
+    clientName: Optional[str] = None
+    code: Optional[str] = None
+    status: Optional[str] = None
+    remark: Optional[str] = None
+    createdAt: str
+    updatedAt: str
+
+
+class FullBackup(BaseModel):
+    """全量备份：覆盖配置、账户、报价与项目。"""
+
+    createdAt: str
+    settings: Settings
+    accounts: List[Account]
+    quotes: List[QuoteRecord]
+    projects: List[Project]
 
 
 # ====== 默认配置 ======
@@ -412,6 +437,23 @@ def load_settings_backup() -> Settings:
         raise RuntimeError(f"无法读取备份：{exc}") from exc
 
 
+def save_full_backup(payload: FullBackup):
+    os.makedirs(os.path.dirname(FULL_BACKUP_FILE), exist_ok=True)
+    with open(FULL_BACKUP_FILE, "w", encoding="utf-8") as f:
+        json.dump(payload.dict(), f, ensure_ascii=False, indent=2)
+
+
+def load_full_backup() -> FullBackup:
+    if not os.path.exists(FULL_BACKUP_FILE):
+        raise FileNotFoundError("全量备份不存在")
+    try:
+        with open(FULL_BACKUP_FILE, "r", encoding="utf-8") as f:
+            data = json.load(f)
+        return FullBackup(**data)
+    except Exception as exc:
+        raise RuntimeError(f"无法读取全量备份：{exc}") from exc
+
+
 # ====== 校验函数 ======
 
 
@@ -546,6 +588,30 @@ def save_quote_records(records: List[QuoteRecord]):
     os.makedirs(os.path.dirname(QUOTES_FILE), exist_ok=True)
     with open(QUOTES_FILE, "w", encoding="utf-8") as f:
         json.dump([r.dict() for r in records], f, ensure_ascii=False, indent=2)
+
+
+def load_projects() -> List[Project]:
+    if not os.path.exists(PROJECTS_FILE):
+        return []
+    try:
+        with open(PROJECTS_FILE, "r", encoding="utf-8") as f:
+            data = json.load(f) or []
+        projects: List[Project] = []
+        for item in data:
+            try:
+                projects.append(Project(**item))
+            except Exception:
+                continue
+        return projects
+    except Exception as exc:
+        print("Failed to load projects:", exc)
+        return []
+
+
+def save_projects(projects: List[Project]):
+    os.makedirs(os.path.dirname(PROJECTS_FILE), exist_ok=True)
+    with open(PROJECTS_FILE, "w", encoding="utf-8") as f:
+        json.dump([p.dict() for p in projects], f, ensure_ascii=False, indent=2)
 
 
 def reassign_quote_owners(old_username: str, new_username: str) -> int:
@@ -700,6 +766,54 @@ def restore_from_backup(
         raise HTTPException(status_code=500, detail=str(exc))
     save_settings(restored)
     return restored
+
+
+@app.post("/api/backup/full", response_model=FullBackup)
+def backup_all(
+    x_user_session: Optional[str] = Header(None),
+    x_admin_session: Optional[str] = Header(None),
+    x_session: Optional[str] = Header(None),
+):
+    """将当前全部关键数据写入全量备份文件。"""
+
+    require_admin(x_admin_session, x_user_session, x_session)
+    backup = FullBackup(
+        createdAt=datetime.utcnow().isoformat() + "Z",
+        settings=load_settings(),
+        accounts=load_accounts(),
+        quotes=load_quote_records(),
+        projects=load_projects(),
+    )
+    save_full_backup(backup)
+    return backup
+
+
+@app.post("/api/backup/full/restore", response_model=FullBackup)
+def restore_full_backup(
+    x_user_session: Optional[str] = Header(None),
+    x_admin_session: Optional[str] = Header(None),
+    x_session: Optional[str] = Header(None),
+):
+    """从全量备份恢复全部关键数据。"""
+
+    require_admin(x_admin_session, x_user_session, x_session)
+    try:
+        backup = load_full_backup()
+    except FileNotFoundError:
+        raise HTTPException(status_code=404, detail="未找到全量备份，请先执行全量备份")
+    except RuntimeError as exc:
+        raise HTTPException(status_code=500, detail=str(exc))
+
+    ensure_settings_valid(backup.settings)
+    save_settings(backup.settings)
+    save_settings_backup(backup.settings)
+    save_quote_records(backup.quotes)
+    save_projects(backup.projects)
+    save_accounts(backup.accounts)
+    global ACCOUNTS
+    ACCOUNTS = backup.accounts
+    SESSIONS.clear()
+    return backup
 
 
 @app.post("/api/settings/restore-factory", response_model=Settings)
@@ -1155,6 +1269,107 @@ def delete_user(
     return {"deleted": username}
 
 
+# ====== 项目管理 ======
+
+
+class ProjectCreate(BaseModel):
+    name: str
+    clientName: Optional[str] = None
+    code: Optional[str] = None
+    status: Optional[str] = None
+    remark: Optional[str] = None
+
+
+class ProjectUpdate(BaseModel):
+    name: Optional[str] = None
+    clientName: Optional[str] = None
+    code: Optional[str] = None
+    status: Optional[str] = None
+    remark: Optional[str] = None
+
+
+@app.get("/api/projects", response_model=List[Project])
+def list_projects(keyword: Optional[str] = None, x_user_session: Optional[str] = Header(None), x_admin_session: Optional[str] = Header(None), x_session: Optional[str] = Header(None)):
+    require_authenticated(x_user_session, x_admin_session, x_session)
+    projects = load_projects()
+    if keyword:
+        lowered = keyword.strip().lower()
+        projects = [p for p in projects if lowered in p.name.lower() or (p.clientName and lowered in p.clientName.lower()) or (p.code and lowered in p.code.lower())]
+    return projects
+
+
+@app.post("/api/projects", response_model=Project)
+def create_project(body: ProjectCreate, x_user_session: Optional[str] = Header(None), x_admin_session: Optional[str] = Header(None), x_session: Optional[str] = Header(None)):
+    require_authenticated(x_user_session, x_admin_session, x_session)
+    name = body.name.strip()
+    if not name:
+        raise HTTPException(status_code=400, detail="项目名称不能为空")
+    projects = load_projects()
+    now = datetime.utcnow().isoformat() + "Z"
+    new_project = Project(
+        id=uuid4().hex,
+        name=name,
+        clientName=body.clientName.strip() if body.clientName else None,
+        code=body.code.strip() if body.code else None,
+        status=body.status.strip() if body.status else None,
+        remark=body.remark.strip() if body.remark else None,
+        createdAt=now,
+        updatedAt=now,
+    )
+    projects.append(new_project)
+    save_projects(projects)
+    return new_project
+
+
+@app.put("/api/projects/{project_id}", response_model=Project)
+def update_project(project_id: str, body: ProjectUpdate, x_admin_session: Optional[str] = Header(None), x_user_session: Optional[str] = Header(None), x_session: Optional[str] = Header(None)):
+    require_admin(x_admin_session, x_user_session, x_session)
+    projects = load_projects()
+    updated_list: List[Project] = []
+    target: Optional[Project] = None
+    for p in projects:
+        if p.id == project_id:
+            new_name = body.name.strip() if body.name is not None else p.name
+            if not new_name:
+                raise HTTPException(status_code=400, detail="项目名称不能为空")
+            def _strip_optional(val: Optional[str], original: Optional[str]):
+                if val is None:
+                    return original
+                val = val.strip()
+                return val if val else None
+            target = Project(
+                **p.dict(),
+                name=new_name,
+                clientName=_strip_optional(body.clientName, p.clientName),
+                code=_strip_optional(body.code, p.code),
+                status=_strip_optional(body.status, p.status),
+                remark=_strip_optional(body.remark, p.remark),
+                updatedAt=datetime.utcnow().isoformat() + "Z",
+            )
+            updated_list.append(target)
+        else:
+            updated_list.append(p)
+    if not target:
+        raise HTTPException(status_code=404, detail="项目不存在")
+    save_projects(updated_list)
+    return target
+
+
+@app.delete("/api/projects/{project_id}")
+def delete_project(project_id: str, x_admin_session: Optional[str] = Header(None), x_user_session: Optional[str] = Header(None), x_session: Optional[str] = Header(None)):
+    require_admin(x_admin_session, x_user_session, x_session)
+    projects = load_projects()
+    remaining = [p for p in projects if p.id != project_id]
+    if len(remaining) == len(projects):
+        raise HTTPException(status_code=404, detail="项目不存在")
+    # 若有报价引用该项目则阻止删除
+    records = load_quote_records()
+    if any(r.projectId == project_id for r in records):
+        raise HTTPException(status_code=400, detail="该项目已有报价记录关联，无法删除")
+    save_projects(remaining)
+    return {"deleted": project_id}
+
+
 # ====== 报价记录：创建 / 查询 / 统计 ======
 
 
@@ -1177,8 +1392,17 @@ def create_quote_record(
     # 普通用户不允许自定义可见范围，默认仅创建人可见；管理员可选择
     visibility = visibility or ("admin_only" if is_admin else "owner_only")
 
+    project_name: Optional[str] = None
+    if body.projectId:
+        matched = next((p for p in load_projects() if p.id == body.projectId), None)
+        if not matched:
+            raise HTTPException(status_code=400, detail="关联的项目不存在")
+        project_name = matched.name
+    elif body.projectName:
+        project_name = body.projectName
+
     existing = load_quote_records()
-    record_data = body.dict(exclude={"visibility", "adopted"})
+    record_data = body.dict(exclude={"visibility", "adopted", "projectName"})
     record = QuoteRecord(
         **record_data,
         id=uuid4().hex,
@@ -1186,6 +1410,7 @@ def create_quote_record(
         createdBy=session.get("username", "unknown"),
         visibility=visibility,
         adopted=bool(body.adopted) if is_admin else False,
+        projectName=project_name,
     )
     existing.append(record)
     save_quote_records(existing)
@@ -1198,6 +1423,7 @@ def list_quote_records(
     pageSize: int = 20,
     month: Optional[str] = None,  # 形如 2024-03
     creator: Optional[str] = None,
+    projectId: Optional[str] = None,
     adopted: Optional[bool] = None,
     visibility: Optional[Literal["admin_only", "all_users", "owner_only"]] = None,
     x_admin_session: Optional[str] = Header(None),
@@ -1237,6 +1463,9 @@ def list_quote_records(
 
     if creator:
         all_records = [r for r in all_records if r.createdBy == creator]
+
+    if projectId:
+        all_records = [r for r in all_records if r.projectId == projectId]
 
     if adopted is not None:
         all_records = [r for r in all_records if bool(r.adopted) == bool(adopted)]
