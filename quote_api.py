@@ -22,6 +22,7 @@ app.add_middleware(
 
 SETTINGS_FILE = "/data/settings.json"
 SETTINGS_BACKUP_FILE = "/data/settings.backup.json"
+FULL_BACKUP_FILE = "/data/full_backup.json"
 ACCOUNT_FILE = "/data/admin_account.json"
 USER_ACCOUNT_FILE = "/data/user_account.json"
 ACCOUNTS_FILE = "/data/accounts.json"
@@ -168,6 +169,16 @@ class Project(BaseModel):
     remark: Optional[str] = None
     createdAt: str
     updatedAt: str
+
+
+class FullBackup(BaseModel):
+    """全量备份：覆盖配置、账户、报价与项目。"""
+
+    createdAt: str
+    settings: Settings
+    accounts: List[Account]
+    quotes: List[QuoteRecord]
+    projects: List[Project]
 
 
 # ====== 默认配置 ======
@@ -424,6 +435,23 @@ def load_settings_backup() -> Settings:
         return Settings(**data)
     except Exception as exc:
         raise RuntimeError(f"无法读取备份：{exc}") from exc
+
+
+def save_full_backup(payload: FullBackup):
+    os.makedirs(os.path.dirname(FULL_BACKUP_FILE), exist_ok=True)
+    with open(FULL_BACKUP_FILE, "w", encoding="utf-8") as f:
+        json.dump(payload.dict(), f, ensure_ascii=False, indent=2)
+
+
+def load_full_backup() -> FullBackup:
+    if not os.path.exists(FULL_BACKUP_FILE):
+        raise FileNotFoundError("全量备份不存在")
+    try:
+        with open(FULL_BACKUP_FILE, "r", encoding="utf-8") as f:
+            data = json.load(f)
+        return FullBackup(**data)
+    except Exception as exc:
+        raise RuntimeError(f"无法读取全量备份：{exc}") from exc
 
 
 # ====== 校验函数 ======
@@ -738,6 +766,54 @@ def restore_from_backup(
         raise HTTPException(status_code=500, detail=str(exc))
     save_settings(restored)
     return restored
+
+
+@app.post("/api/backup/full", response_model=FullBackup)
+def backup_all(
+    x_user_session: Optional[str] = Header(None),
+    x_admin_session: Optional[str] = Header(None),
+    x_session: Optional[str] = Header(None),
+):
+    """将当前全部关键数据写入全量备份文件。"""
+
+    require_admin(x_admin_session, x_user_session, x_session)
+    backup = FullBackup(
+        createdAt=datetime.utcnow().isoformat() + "Z",
+        settings=load_settings(),
+        accounts=load_accounts(),
+        quotes=load_quote_records(),
+        projects=load_projects(),
+    )
+    save_full_backup(backup)
+    return backup
+
+
+@app.post("/api/backup/full/restore", response_model=FullBackup)
+def restore_full_backup(
+    x_user_session: Optional[str] = Header(None),
+    x_admin_session: Optional[str] = Header(None),
+    x_session: Optional[str] = Header(None),
+):
+    """从全量备份恢复全部关键数据。"""
+
+    require_admin(x_admin_session, x_user_session, x_session)
+    try:
+        backup = load_full_backup()
+    except FileNotFoundError:
+        raise HTTPException(status_code=404, detail="未找到全量备份，请先执行全量备份")
+    except RuntimeError as exc:
+        raise HTTPException(status_code=500, detail=str(exc))
+
+    ensure_settings_valid(backup.settings)
+    save_settings(backup.settings)
+    save_settings_backup(backup.settings)
+    save_quote_records(backup.quotes)
+    save_projects(backup.projects)
+    save_accounts(backup.accounts)
+    global ACCOUNTS
+    ACCOUNTS = backup.accounts
+    SESSIONS.clear()
+    return backup
 
 
 @app.post("/api/settings/restore-factory", response_model=Settings)
@@ -1326,7 +1402,7 @@ def create_quote_record(
         project_name = body.projectName
 
     existing = load_quote_records()
-    record_data = body.dict(exclude={"visibility", "adopted"})
+    record_data = body.dict(exclude={"visibility", "adopted", "projectName"})
     record = QuoteRecord(
         **record_data,
         id=uuid4().hex,

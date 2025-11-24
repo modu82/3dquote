@@ -71,8 +71,9 @@
 - `GET /api/quotes`：具备权限的登录用户可按月份/创建人/项目筛选报价记录，管理员可追加按可见范围、采用状态筛选并管理全部记录。
 - `PATCH /api/quotes/{id}` / `DELETE /api/quotes/{id}`：管理员更新记录可见范围/采用状态或删除。
 - `GET /api/quotes/summary`：管理员查看按月汇总的报价数量与金额。
+- `POST /api/backup/full` / `POST /api/backup/full/restore`：管理员备份/恢复全量数据（配置、账户、项目与报价记录），恢复时会同时刷新配置备份并清理会话。
 
-配置持久化文件位于 `./data/settings.json` 与 `./data/accounts.json`，可备份或通过 Docker 卷挂载到其他路径。
+配置持久化文件位于 `./data/settings.json`、`./data/accounts.json`、`./data/projects.json` 与 `./data/quotes.json`，可通过全量备份接口或 Docker 卷挂载到其他路径。
 
 ---
 

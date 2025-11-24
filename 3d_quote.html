@@ -725,6 +725,8 @@
           <button type="button" class="mini-btn" id="importSettingsBtn">导入备份/配置</button>
           <button type="button" class="mini-btn" id="backupSettingsBtn">备份当前配置</button>
           <button type="button" class="mini-btn" id="restoreBackupBtn">恢复备份配置</button>
+          <button type="button" class="mini-btn" id="backupFullBtn">备份全部数据</button>
+          <button type="button" class="mini-btn" id="restoreFullBtn">恢复全部数据</button>
           <button type="button" class="mini-btn" id="restoreFactoryBtn">恢复出厂设置</button>
           <button type="button" class="mini-btn" id="saveSettingsBtn">保存设置到服务器</button>
         </div>
@@ -3111,6 +3113,41 @@
       }
     }
 
+    async function backupAllData() {
+      if (!isAdmin || !sessionToken) {
+        alert("请先以管理员身份登录。");
+        return;
+      }
+      try {
+        const resp = await fetch(`${API_BASE}/backup/full`, { method: "POST", headers: authHeaders() });
+        if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+        alert("已完成全量备份（含配置、用户、项目与报价记录）。");
+      } catch (e) {
+        alert(`全量备份失败：${e.message}`);
+      }
+    }
+
+    async function restoreAllData() {
+      if (!isAdmin || !sessionToken) {
+        alert("请先以管理员身份登录。");
+        return;
+      }
+      if (!window.confirm("确定要恢复全量备份吗？当前配置、用户、项目与报价记录都会被覆盖。")) return;
+      try {
+        const resp = await fetch(`${API_BASE}/backup/full/restore`, { method: "POST", headers: authHeaders() });
+        const data = await resp.json().catch(() => ({}));
+        if (!resp.ok) throw new Error(data.detail || `HTTP ${resp.status}`);
+        if (data.settings) {
+          applySettingsToRuntime(data.settings);
+          initSettingsFromRuntime();
+        }
+        alert("已从全量备份恢复全部数据，请重新登录以刷新权限与会话。");
+        await logoutFlow();
+      } catch (e) {
+        alert(`恢复全量备份失败：${e.message}`);
+      }
+    }
+
     async function restoreFactorySettings() {
       if (!isAdmin || !sessionToken) {
         alert("请先以管理员身份登录。");
@@ -3218,6 +3255,8 @@
     document.getElementById("exportSettingsBtn").addEventListener("click", exportCurrentSettings);
     document.getElementById("backupSettingsBtn").addEventListener("click", backupCurrentSettings);
     document.getElementById("restoreBackupBtn").addEventListener("click", restoreBackupSettings);
+    document.getElementById("backupFullBtn").addEventListener("click", backupAllData);
+    document.getElementById("restoreFullBtn").addEventListener("click", restoreAllData);
     document.getElementById("restoreFactoryBtn").addEventListener("click", restoreFactorySettings);
     document.getElementById("changePasswordBtn").addEventListener("click", changeAdminPassword);
     document.getElementById("saveSettingsBtnMaterials").addEventListener("click", saveSettingsToServer);
