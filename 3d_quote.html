@@ -2815,6 +2815,7 @@
         const projectSelect = document.getElementById("projectSelect");
         const projectId = projectSelect?.value || "";
         const projectName = cachedProjects.find(p => p.id === projectId)?.name || "";
+        const postProcess = quote.postProcess || quote.post || {};
         const resp = await fetch(`${API_BASE}/quotes`, {
           method: "POST",
           headers: { "Content-Type": "application/json", ...authHeaders() },
@@ -2825,6 +2826,8 @@
             totalPrice: quote.totalPrice,
             finalPricePerPart: quote.finalPricePerPart,
             costSumPerPart: quote.costSumPerPart,
+            withProfitPerPart: quote.withProfitPerPart,
+            minPricePerPart: quote.minPricePerPart,
             profitMargin: quote.profitMargin,
             materialCostPerPart: quote.materialCostPerPart,
             machineCostPerPart: quote.machineCostPerPart,
@@ -2832,10 +2835,13 @@
             setupCostPerPart: quote.setupCostPerPart,
             material: quote.material,
             machine: quote.machine,
-            postProcess: quote.post,
+            postProcess,
             weight: quote.weight,
             volume: quote.volume,
             totalHours: quote.totalHours,
+            days: quote.days,
+            hours: quote.hours,
+            minutes: quote.minutes,
             projectId: projectId || null,
             projectName: projectName || undefined,
             visibility: recordVisibility
@@ -3348,6 +3354,61 @@
       }
     });
 
+    function renderQuoteResult(quote) {
+      const resultEl = document.getElementById("result");
+      const resultTotalEl = document.getElementById("result-total");
+      const resultDetailEl = document.getElementById("result-detail");
+      if (!resultEl || !resultTotalEl || !resultDetailEl) return;
+
+      const material = quote.material || {};
+      const machine = quote.machine || {};
+      const post = quote.postProcess || quote.post || {};
+      const weight = quote.weight ?? 0;
+      const volume = quote.volume ?? 0;
+      const days = quote.days ?? 0;
+      const hours = quote.hours ?? 0;
+      const minutes = quote.minutes ?? 0;
+      const totalHours = quote.totalHours ?? 0;
+      const quantity = quote.quantity ?? 0;
+      const postMultiplier = quote.postMultiplier ?? 1;
+      const setupFee = quote.setupFee ?? runtimeConfig.setupFee ?? 0;
+
+      const materialPriceLabel = material.pricingMode === "VOLUME"
+        ? `${material.pricePerCubicMeter ?? 0} 元/m³`
+        : `${material.pricePerKg ?? 0} 元/kg`;
+      const materialUsageLabel = material.pricingMode === "VOLUME"
+        ? `${volume.toFixed(2)} cm³`
+        : `${weight.toFixed(2)} g`;
+      const machineHourlyLabel = formatMoney(quote.machineHourlyRateUsed ?? machine.hourlyRate ?? 0);
+
+      resultTotalEl.textContent = `${formatMoney(quote.totalPrice)}  （共 ${quantity} 件，单件 ${formatMoney(quote.finalPricePerPart)}）`;
+
+      const lines = [
+        `▶ 加工类型：${quote.processLabel || quote.processType}`,
+        `▶ 材料：${material.vendor} / ${material.name}  ${materialPriceLabel}`,
+        `   - 单件耗材：${materialUsageLabel} → 材料成本：${formatMoney(quote.materialCostPerPart)}`,
+        `▶ 设备：${machine.vendor} / ${machine.name}  ${machineHourlyLabel} 元/小时`,
+        `   - 单件打印时间：${days} 天 ${hours} 小时 ${minutes} 分钟 ≈ ${totalHours.toFixed(2)} 小时`,
+        `   - 设备成本：${formatMoney(quote.machineCostPerPart)}`,
+        `▶ 后处理：${post.name} → 单件后处理成本：${formatMoney(quote.postCostPerPart)}（时间 ${(quote.totalPostMinutes ?? 0).toFixed(2)} 分钟，人工 ${formatMoney(quote.postLaborCost ?? 0)}，材料 ${formatMoney(quote.postMaterialCost ?? 0)}，系数 x${postMultiplier.toFixed(2)}）`,
+        `▶ 上机/调机费（订单）：${formatMoney(setupFee)}  分摊后每件：${formatMoney(quote.setupCostPerPart)}`,
+        "",
+        `▶ 单件成本小计：${formatMoney(quote.costSumPerPart)}`,
+        `▶ 利润率：${((quote.profitMargin ?? 0) * 100).toFixed(0)}%`,
+        `▶ 单件最低价：${formatMoney(quote.minPricePerPart)}`,
+        `▶ 含利润单价：${formatMoney(quote.withProfitPerPart ?? 0)}`,
+        `▶ 最终计价单件：${formatMoney(quote.finalPricePerPart)}`,
+        "",
+        `▶ 数量：${quantity} 件`,
+        `▶ 订单总价：${formatMoney(quote.totalPrice)}`
+      ];
+
+      resultDetailEl.textContent = lines.join("\n");
+      resultEl.style.display = "block";
+
+      lastQuote = { ...quote, post };
+    }
+
     // ===== 报价计算 & 导出 =====
     document.getElementById("quote-form").addEventListener("submit", function (e) {
       e.preventDefault();
@@ -3412,84 +3473,15 @@
       const customMarginInput = document.getElementById("customMargin").value;
       const customMinInput = document.getElementById("customMin").value;
 
-      const profitMargin = customMarginInput !== ""
-        ? (parseFloat(customMarginInput) || 0) / 100
-        : runtimeConfig.defaultProfitMargin;
-
-      const minPricePerPart = customMinInput !== ""
-        ? (parseFloat(customMinInput) || 0)
-        : runtimeConfig.defaultMinPricePerPart;
-
-      const processCosts = getProcessCostConfig(processType);
-      const materialCostPerPart = material.pricingMode === "VOLUME"
-        ? ((volume / 1000000) * (material.pricePerCubicMeter || 0))
-        : ((weight / 1000) * (material.pricePerKg || 0));
-      const operatorHourly = (processCosts.laborHourlyCost || 0) / (processCosts.machinesPerOperator || 1);
-      const overheadHourly = processCosts.overheadHourlyPerMachine || 0;
-      const electricityHourly = (machine.powerW ? (machine.powerW / 1000) * (runtimeConfig.electricityPrice || 0) : 0);
-      const baseMachineHourly = machine.hourlyRate || 0;
-      const depreciationHourly = computeMachineDepreciationHourly(machine);
-      const machineHourly = baseMachineHourly > 0 ? baseMachineHourly : depreciationHourly;
-      const operationalHourly = operatorHourly + overheadHourly + electricityHourly;
-      const hourlyRateIncludesOperational = machine.hourlyRateIncludesOperational;
-      const inferredAllIn = hourlyRateIncludesOperational === true
-        || (hourlyRateIncludesOperational == null && baseMachineHourly > 0 && depreciationHourly === 0);
-      const shouldAddOperational = !inferredAllIn;
-      const effectiveMachineHourly = machineHourly + (shouldAddOperational ? operationalHourly : 0);
-      const machineCostPerPart = totalHours * effectiveMachineHourly;
-      const totalPostMinutes = (post.baseMinutes || 0) + (post.minutesPerGram || 0) * weight;
-      const postLaborCost = (processCosts.laborHourlyCost || 0) * totalPostMinutes / 60;
-      const postMaterialCost = (post.extraMaterialCostPerGram || 0) * weight;
-      const postMultiplier = post.costMultiplier || 1;
-      const postCostPerPart = (postLaborCost + postMaterialCost) * postMultiplier;
-      const setupCostPerPart = quantity > 0 ? runtimeConfig.setupFee / quantity : runtimeConfig.setupFee;
-
-      const costSumPerPart = materialCostPerPart + machineCostPerPart + postCostPerPart + setupCostPerPart;
-      const withProfitPerPart = costSumPerPart * (1 + profitMargin);
-      const finalPricePerPart = Math.max(withProfitPerPart, minPricePerPart);
-      const totalPrice = finalPricePerPart * quantity;
-
-      const materialPriceLabel = material.pricingMode === "VOLUME"
-        ? `${material.pricePerCubicMeter ?? 0} 元/m³`
-        : `${material.pricePerKg ?? 0} 元/kg`;
-      const materialUsageLabel = material.pricingMode === "VOLUME"
-        ? `${volume.toFixed(2)} cm³`
-        : `${weight.toFixed(2)} g`;
-      const machineHourlyLabel = formatMoney(effectiveMachineHourly);
-
-      const resultEl = document.getElementById("result");
-      const resultTotalEl = document.getElementById("result-total");
-      const resultDetailEl = document.getElementById("result-detail");
-
-      resultTotalEl.textContent = `${formatMoney(totalPrice)}  （共 ${quantity} 件，单件 ${formatMoney(finalPricePerPart)}）`;
-
-      const lines = [
-        `▶ 加工类型：${processLabel}`,
-        `▶ 材料：${material.vendor} / ${material.name}  ${materialPriceLabel}`,
-        `   - 单件耗材：${materialUsageLabel} → 材料成本：${formatMoney(materialCostPerPart)}`,
-        `▶ 设备：${machine.vendor} / ${machine.name}  ${machineHourlyLabel} 元/小时`,
-        `   - 单件打印时间：${days} 天 ${hours} 小时 ${minutes} 分钟 ≈ ${totalHours.toFixed(2)} 小时`,
-        `   - 设备成本：${formatMoney(machineCostPerPart)}`,
-        `▶ 后处理：${post.name} → 单件后处理成本：${formatMoney(postCostPerPart)}（时间 ${totalPostMinutes.toFixed(2)} 分钟，人工 ${formatMoney(postLaborCost)}，材料 ${formatMoney(postMaterialCost)}，系数 x${postMultiplier.toFixed(2)}）`,
-        `▶ 上机/调机费（订单）：${formatMoney(runtimeConfig.setupFee)}  分摊后每件：${formatMoney(setupCostPerPart)}`,
-        "",
-        `▶ 单件成本小计：${formatMoney(costSumPerPart)}`,
-        `▶ 利润率：${(profitMargin * 100).toFixed(0)}%`,
-        `▶ 单件最低价：${formatMoney(minPricePerPart)}`,
-        `▶ 含利润单价：${formatMoney(withProfitPerPart)}`,
-        `▶ 最终计价单件：${formatMoney(finalPricePerPart)}`,
-        "",
-        `▶ 数量：${quantity} 件`,
-        `▶ 订单总价：${formatMoney(totalPrice)}`
-      ];
-
-      resultDetailEl.textContent = lines.join("\n");
-      resultEl.style.display = "block";
-
-      lastQuote = {
-        material,
-        machine,
-        post,
+      const payload = {
+        processType,
+        processLabel,
+        materialVendor: material.vendor,
+        materialName: material.name,
+        materialPricingMode: material.pricingMode,
+        machineVendor: machine.vendor,
+        machineName: machine.name,
+        postProcessKey: post.key,
         weight,
         volume,
         days,
@@ -3497,25 +3489,31 @@
         minutes,
         totalHours,
         quantity,
-        profitMargin,
-        minPricePerPart,
-        materialCostPerPart,
-        machineCostPerPart,
-        postCostPerPart,
-        postMultiplier,
-        postLaborCost,
-        postMaterialCost,
-        totalPostMinutes,
-        setupCostPerPart,
-        machineHourlyRateUsed: effectiveMachineHourly,
-        machineOperationalHourly: baseMachineHourly > 0 ? 0 : operationalHourly,
-        costSumPerPart,
-        withProfitPerPart,
-        finalPricePerPart,
-        totalPrice,
-        processType,
-        processLabel
+        profitMargin: customMarginInput !== "" ? ((parseFloat(customMarginInput) || 0) / 100) : null,
+        minPricePerPart: customMinInput !== "" ? (parseFloat(customMinInput) || 0) : null,
       };
+
+      try {
+        const resp = await fetch(`${API_BASE}/calc-quote`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json", ...authHeaders() },
+          body: JSON.stringify(payload)
+        });
+        const data = await resp.json().catch(() => ({}));
+        if (!resp.ok) throw new Error(data.detail || "计算失败");
+
+        const normalized = {
+          ...data,
+          processLabel: data.processLabel || processLabel,
+          material: data.material || material,
+          machine: data.machine || machine,
+          postProcess: data.postProcess || post,
+          post: data.postProcess || post,
+        };
+        renderQuoteResult(normalized);
+      } catch (err) {
+        alert(err.message || "计算失败");
+      }
 
     });
 
@@ -3533,6 +3531,7 @@
       persistQuoteResult(lastQuote);
       const now = new Date();
       const dateStr = now.toLocaleString("zh-CN");
+      const setupFee = lastQuote.setupFee ?? runtimeConfig.setupFee;
       const lines = [
         "加工报价单",
         "========================",
@@ -3552,7 +3551,7 @@
         `后处理等级：${lastQuote.post.name}`,
         `后处理成本（单件）：${formatMoney(lastQuote.postCostPerPart)}（时间 ${lastQuote.totalPostMinutes.toFixed(2)} 分钟，人工 ${formatMoney(lastQuote.postLaborCost)}, 材料 ${formatMoney(lastQuote.postMaterialCost)}, 系数 x${(lastQuote.postMultiplier || 1).toFixed(2)}）`,
         "",
-        `上机/调机费（订单）：${formatMoney(runtimeConfig.setupFee)}`,
+        `上机/调机费（订单）：${formatMoney(setupFee)}`,
         `分摊后上机费（单件）：${formatMoney(lastQuote.setupCostPerPart)}`,
         "",
         `单件成本小计：${formatMoney(lastQuote.costSumPerPart)}`,

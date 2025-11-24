@@ -92,6 +92,58 @@ class Settings(BaseModel):
     # 新增：后处理规则列表
     postProcessRules: List[PostProcessRule] = []
 
+
+class CalcQuoteRequest(BaseModel):
+    processType: str
+    processLabel: Optional[str] = None
+    materialVendor: str
+    materialName: str
+    materialPricingMode: Optional[Literal["WEIGHT", "VOLUME"]] = None
+    machineVendor: str
+    machineName: str
+    postProcessKey: str
+    weight: Optional[float] = 0
+    volume: Optional[float] = 0
+    days: float = 0
+    hours: float = 0
+    minutes: float = 0
+    totalHours: Optional[float] = None
+    quantity: int = 1
+    profitMargin: Optional[float] = None
+    minPricePerPart: Optional[float] = None
+
+
+class CalcQuoteResponse(BaseModel):
+    processType: str
+    processLabel: Optional[str] = None
+    quantity: int
+    profitMargin: float
+    minPricePerPart: float
+    withProfitPerPart: float
+    finalPricePerPart: float
+    totalPrice: float
+    costSumPerPart: float
+    materialCostPerPart: float
+    machineCostPerPart: float
+    postCostPerPart: float
+    setupCostPerPart: float
+    setupFee: float
+    material: Material
+    machine: Machine
+    postProcess: PostProcessRule
+    weight: Optional[float] = None
+    volume: Optional[float] = None
+    days: float = 0
+    hours: float = 0
+    minutes: float = 0
+    totalHours: float
+    postLaborCost: float
+    postMaterialCost: float
+    totalPostMinutes: float
+    postMultiplier: float
+    machineHourlyRateUsed: float
+    machineOperationalHourly: float
+
 class Account(BaseModel):
     username: str
     salt: str
@@ -132,6 +184,8 @@ class QuoteRecordCreate(BaseModel):
     totalPrice: float
     finalPricePerPart: float
     costSumPerPart: float
+    withProfitPerPart: Optional[float] = None
+    minPricePerPart: Optional[float] = None
     profitMargin: float
     materialCostPerPart: float
     machineCostPerPart: float
@@ -145,6 +199,9 @@ class QuoteRecordCreate(BaseModel):
     weight: Optional[float] = None
     volume: Optional[float] = None
     totalHours: Optional[float] = None
+    days: Optional[float] = None
+    hours: Optional[float] = None
+    minutes: Optional[float] = None
     visibility: Literal["admin_only", "all_users", "owner_only"] = "admin_only"
     adopted: bool = False
 
@@ -612,6 +669,154 @@ def save_projects(projects: List[Project]):
     os.makedirs(os.path.dirname(PROJECTS_FILE), exist_ok=True)
     with open(PROJECTS_FILE, "w", encoding="utf-8") as f:
         json.dump([p.dict() for p in projects], f, ensure_ascii=False, indent=2)
+
+
+# ====== 报价计算工具 ======
+
+
+def _find_material(settings: Settings, vendor: str, name: str, pricing_mode: Optional[str]) -> Material:
+    for m in settings.materials:
+        if m.vendor == vendor and m.name == name:
+            if pricing_mode and m.pricingMode != pricing_mode:
+                continue
+            return m
+    raise HTTPException(status_code=400, detail="所选材料不存在或已被删除")
+
+
+def _find_machine(settings: Settings, vendor: str, name: str) -> Machine:
+    for m in settings.machines:
+        if m.vendor == vendor and m.name == name:
+            return m
+    raise HTTPException(status_code=400, detail="所选设备不存在或已被删除")
+
+
+def _find_post_rule(settings: Settings, key: str) -> PostProcessRule:
+    for rule in settings.postProcessRules:
+        if rule.key == key:
+            return rule
+    raise HTTPException(status_code=400, detail="所选后处理规则不存在或已被删除")
+
+
+def _compute_machine_depreciation(machine: Machine) -> float:
+    try:
+        price = float(machine.price) if machine.price is not None else None
+        life_years = float(machine.expectedLifeYears) if machine.expectedLifeYears is not None else None
+        monthly_hours = float(machine.expectedMonthlyHours) if machine.expectedMonthlyHours is not None else None
+    except Exception:
+        return 0.0
+    if not price or not life_years or not monthly_hours:
+        return 0.0
+    total_hours = life_years * 12 * monthly_hours
+    return price / total_hours if total_hours > 0 else 0.0
+
+
+def _resolve_process_costs(settings: Settings, process_type: str) -> Dict[str, float]:
+    base = (settings.processCosts or {}).get(process_type) or {}
+    return {
+        "laborHourlyCost": float(base.get("laborHourlyCost", settings.laborHourlyCost or 0)),
+        "machinesPerOperator": float(base.get("machinesPerOperator", settings.machinesPerOperator or 1)) or 1.0,
+        "overheadHourlyPerMachine": float(base.get("overheadHourlyPerMachine", settings.overheadHourlyPerMachine or 0)),
+    }
+
+
+def calculate_quote(data: CalcQuoteRequest, settings: Settings) -> CalcQuoteResponse:
+    if data.quantity <= 0:
+        raise HTTPException(status_code=400, detail="数量必须大于 0")
+
+    material = _find_material(settings, data.materialVendor, data.materialName, data.materialPricingMode)
+    machine = _find_machine(settings, data.machineVendor, data.machineName)
+    post = _find_post_rule(settings, data.postProcessKey)
+
+    if material.processType and material.processType != data.processType:
+        raise HTTPException(status_code=400, detail="所选材料与加工类型不匹配")
+    if machine.processType and machine.processType != data.processType:
+        raise HTTPException(status_code=400, detail="所选设备与加工类型不匹配")
+    if post.processType and post.processType != data.processType:
+        raise HTTPException(status_code=400, detail="所选后处理规则与加工类型不匹配")
+
+    weight = float(data.weight or 0)
+    volume = float(data.volume or 0)
+    if material.pricingMode == "VOLUME" and volume <= 0:
+        raise HTTPException(status_code=400, detail="当前材料按体积计价，请填写有效的体积")
+    if material.pricingMode != "VOLUME" and weight <= 0:
+        raise HTTPException(status_code=400, detail="当前材料按重量计价，请填写有效的重量")
+
+    hours_from_segments = (data.days or 0) * 24 + (data.hours or 0) + (data.minutes or 0) / 60
+    total_hours = data.totalHours if data.totalHours and data.totalHours > 0 else hours_from_segments
+    if total_hours <= 0:
+        raise HTTPException(status_code=400, detail="请填写打印时间（至少一个大于 0 的值）")
+
+    process_costs = _resolve_process_costs(settings, data.processType)
+    operator_hourly = process_costs["laborHourlyCost"] / (process_costs["machinesPerOperator"] or 1)
+    overhead_hourly = process_costs["overheadHourlyPerMachine"]
+    electricity_hourly = (machine.powerW or 0) / 1000 * (settings.electricityPrice or 0)
+
+    base_machine_hourly = machine.hourlyRate or 0
+    depreciation_hourly = _compute_machine_depreciation(machine)
+    machine_hourly = base_machine_hourly if base_machine_hourly > 0 else depreciation_hourly
+    operational_hourly = operator_hourly + overhead_hourly + electricity_hourly
+
+    inferred_all_in = (
+        machine.hourlyRateIncludesOperational is True
+        or (machine.hourlyRateIncludesOperational is None and base_machine_hourly > 0 and depreciation_hourly == 0)
+    )
+    should_add_operational = not inferred_all_in
+    effective_machine_hourly = machine_hourly + (operational_hourly if should_add_operational else 0)
+    machine_cost_per_part = total_hours * effective_machine_hourly
+
+    if material.pricingMode == "VOLUME":
+        material_cost_per_part = (volume / 1_000_000) * (material.pricePerCubicMeter or 0)
+    else:
+        material_cost_per_part = (weight / 1000) * (material.pricePerKg or 0)
+
+    total_post_minutes = (post.baseMinutes or 0) + (post.minutesPerGram or 0) * weight
+    post_labor_cost = process_costs["laborHourlyCost"] * total_post_minutes / 60
+    post_material_cost = (post.extraMaterialCostPerGram or 0) * weight
+    post_multiplier = post.costMultiplier or 1
+    post_cost_per_part = (post_labor_cost + post_material_cost) * post_multiplier
+
+    setup_fee = settings.setupFee
+    setup_cost_per_part = setup_fee / data.quantity if data.quantity > 0 else setup_fee
+
+    cost_sum_per_part = material_cost_per_part + machine_cost_per_part + post_cost_per_part + setup_cost_per_part
+    profit_margin = data.profitMargin if data.profitMargin is not None else settings.defaultProfitMargin
+    min_price_per_part = data.minPricePerPart if data.minPricePerPart is not None else settings.defaultMinPricePerPart
+    with_profit_per_part = cost_sum_per_part * (1 + profit_margin)
+    final_price_per_part = max(with_profit_per_part, min_price_per_part)
+    total_price = final_price_per_part * data.quantity
+
+    return CalcQuoteResponse(
+        processType=data.processType,
+        processLabel=data.processLabel,
+        quantity=data.quantity,
+        profitMargin=profit_margin,
+        minPricePerPart=min_price_per_part,
+        withProfitPerPart=with_profit_per_part,
+        finalPricePerPart=final_price_per_part,
+        totalPrice=total_price,
+        costSumPerPart=cost_sum_per_part,
+        materialCostPerPart=material_cost_per_part,
+        machineCostPerPart=machine_cost_per_part,
+        postCostPerPart=post_cost_per_part,
+        setupCostPerPart=setup_cost_per_part,
+        setupFee=setup_fee,
+        material=material,
+        machine=machine,
+        postProcess=post,
+        weight=weight,
+        volume=volume,
+        days=data.days,
+        hours=data.hours,
+        minutes=data.minutes,
+        totalHours=total_hours,
+        postLaborCost=post_labor_cost,
+        postMaterialCost=post_material_cost,
+        totalPostMinutes=total_post_minutes,
+        postMultiplier=post_multiplier,
+        machineHourlyRateUsed=effective_machine_hourly,
+        machineOperationalHourly=0 if inferred_all_in else operational_hourly,
+    )
+
 
 
 def reassign_quote_owners(old_username: str, new_username: str) -> int:
@@ -1370,6 +1575,19 @@ def delete_project(project_id: str, x_admin_session: Optional[str] = Header(None
     return {"deleted": project_id}
 
 
+@app.post("/api/calc-quote", response_model=CalcQuoteResponse)
+def calc_quote(
+    body: CalcQuoteRequest,
+    x_user_session: Optional[str] = Header(None),
+    x_admin_session: Optional[str] = Header(None),
+    x_session: Optional[str] = Header(None),
+):
+    """统一的报价计算接口，将所有金额计算移到后端。"""
+    require_authenticated(x_user_session, x_admin_session, x_session)
+    settings = load_settings()
+    return calculate_quote(body, settings)
+
+
 # ====== 报价记录：创建 / 查询 / 统计 ======
 
 
@@ -1401,16 +1619,64 @@ def create_quote_record(
     elif body.projectName:
         project_name = body.projectName
 
+    material_info = body.material or {}
+    machine_info = body.machine or {}
+    post_info = body.postProcess or {}
+
+    calc_request = CalcQuoteRequest(
+        processType=body.processType,
+        processLabel=body.processLabel,
+        materialVendor=str(material_info.get("vendor", "")),
+        materialName=str(material_info.get("name", "")),
+        materialPricingMode=material_info.get("pricingMode"),
+        machineVendor=str(machine_info.get("vendor", "")),
+        machineName=str(machine_info.get("name", "")),
+        postProcessKey=str(post_info.get("key") or post_info.get("name") or ""),
+        weight=body.weight,
+        volume=body.volume,
+        quantity=body.quantity,
+        totalHours=body.totalHours,
+        days=body.days or 0,
+        hours=body.hours or 0,
+        minutes=body.minutes or 0,
+        profitMargin=body.profitMargin,
+        minPricePerPart=body.minPricePerPart,
+    )
+
+    settings = load_settings()
+    calc_result = calculate_quote(calc_request, settings)
+
     existing = load_quote_records()
-    record_data = body.dict(exclude={"visibility", "adopted", "projectName"})
     record = QuoteRecord(
-        **record_data,
+        processType=calc_result.processType,
+        processLabel=calc_result.processLabel,
+        quantity=calc_result.quantity,
+        totalPrice=calc_result.totalPrice,
+        finalPricePerPart=calc_result.finalPricePerPart,
+        costSumPerPart=calc_result.costSumPerPart,
+        withProfitPerPart=calc_result.withProfitPerPart,
+        minPricePerPart=calc_result.minPricePerPart,
+        profitMargin=calc_result.profitMargin,
+        materialCostPerPart=calc_result.materialCostPerPart,
+        machineCostPerPart=calc_result.machineCostPerPart,
+        postCostPerPart=calc_result.postCostPerPart,
+        setupCostPerPart=calc_result.setupCostPerPart,
+        material=calc_result.material.dict(),
+        machine=calc_result.machine.dict(),
+        postProcess=calc_result.postProcess.dict(),
+        projectId=body.projectId,
+        projectName=project_name,
+        weight=calc_result.weight,
+        volume=calc_result.volume,
+        totalHours=calc_result.totalHours,
+        days=calc_result.days,
+        hours=calc_result.hours,
+        minutes=calc_result.minutes,
+        visibility=visibility,
+        adopted=bool(body.adopted) if is_admin else False,
         id=uuid4().hex,
         createdAt=datetime.utcnow().isoformat() + "Z",
         createdBy=session.get("username", "unknown"),
-        visibility=visibility,
-        adopted=bool(body.adopted) if is_admin else False,
-        projectName=project_name,
     )
     existing.append(record)
     save_quote_records(existing)
