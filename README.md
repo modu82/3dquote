@@ -64,10 +64,13 @@
 - `PUT /api/admin/users/{username}` / `DELETE /api/admin/users/{username}`：管理员编辑用户名/角色、记录开关或删除账号，自动校验至少保留一名启用的管理员。
 - `POST /api/admin/users/{username}/toggle`：启用或禁用指定用户。
 - `POST /api/admin/users/{username}/reset-password`：重置用户密码。
-- `POST /api/quotes`：导出报价单时保存一次报价记录，自动记录创建人，可指定可见范围（仅管理员/全部登录用户/仅创建人）和“是否采用”状态，若账号被管理员关闭记录开关则拒绝写入。
-- `GET /api/quotes`：具备权限的登录用户可按月份/创建人筛选报价记录，管理员可追加按可见范围、采用状态筛选并管理全部记录。
- - `PATCH /api/quotes/{id}` / `DELETE /api/quotes/{id}`：管理员更新记录可见范围/采用状态或删除。
- - `GET /api/quotes/summary`：管理员查看按月汇总的报价数量与金额。
+- `GET /api/projects`：登录后获取项目列表，可按名称/客户/编号模糊搜索。
+- `POST /api/projects`：登录用户创建项目（供报价时快速关联）。
+- `PUT /api/projects/{id}` / `DELETE /api/projects/{id}`：管理员更新或删除项目（若已有报价关联则阻止删除）。
+- `POST /api/quotes`：导出报价单时保存一次报价记录，自动记录创建人，可指定可见范围（仅管理员/全部登录用户/仅创建人）和“是否采用”状态，若账号被管理员关闭记录开关则拒绝写入；支持携带项目 ID 关联到指定项目。
+- `GET /api/quotes`：具备权限的登录用户可按月份/创建人/项目筛选报价记录，管理员可追加按可见范围、采用状态筛选并管理全部记录。
+- `PATCH /api/quotes/{id}` / `DELETE /api/quotes/{id}`：管理员更新记录可见范围/采用状态或删除。
+- `GET /api/quotes/summary`：管理员查看按月汇总的报价数量与金额。
 
 配置持久化文件位于 `./data/settings.json` 与 `./data/accounts.json`，可备份或通过 Docker 卷挂载到其他路径。
 
