@@ -412,6 +412,16 @@ def load_settings_backup() -> Settings:
         raise RuntimeError(f"无法读取备份：{exc}") from exc
 
 
+# ====== 校验函数 ======
+
+
+def ensure_settings_valid(settings: Settings):
+    if len(settings.materials) == 0:
+        raise HTTPException(status_code=400, detail="至少需要一个材料")
+    if len(settings.machines) == 0:
+        raise HTTPException(status_code=400, detail="至少需要一台设备")
+
+
 # ====== 工具函数：密码 & 账户 ======
 
 def hash_password(password: str, salt: str) -> str:
@@ -625,13 +635,10 @@ def update_settings(
     x_session: Optional[str] = Header(None),
 ):
     """只有登录的管理员才能修改设置。"""
-    if len(settings.materials) == 0:
-        raise HTTPException(status_code=400, detail="至少需要一个材料")
-    if len(settings.machines) == 0:
-        raise HTTPException(status_code=400, detail="至少需要一台设备")
-
     # 权限检查
     require_admin(x_admin_session, x_user_session, x_session)
+
+    ensure_settings_valid(settings)
 
     save_settings(settings)
     return settings
@@ -659,6 +666,22 @@ def backup_settings(
     current = load_settings()
     save_settings_backup(current)
     return current
+
+
+@app.post("/api/settings/import", response_model=Settings)
+def import_settings(
+    settings: Settings,
+    x_user_session: Optional[str] = Header(None),
+    x_admin_session: Optional[str] = Header(None),
+    x_session: Optional[str] = Header(None),
+):
+    """从上传内容导入配置，写入当前配置与备份文件。"""
+    require_admin(x_admin_session, x_user_session, x_session)
+
+    ensure_settings_valid(settings)
+    save_settings(settings)
+    save_settings_backup(settings)
+    return settings
 
 
 @app.post("/api/settings/restore", response_model=Settings)

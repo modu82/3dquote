@@ -57,6 +57,7 @@
 
 - `GET /api/settings`：登录后获取当前报价配置（材料、设备、利润率、后处理规则等）。
 - `POST /api/settings`：更新报价配置，需在请求头携带有效管理员会话（支持 `X-Session` 或 `X-Admin-Session`）。
+- `POST /api/settings/import`：管理员上传 JSON 配置并直接覆盖当前配置，同时生成最新备份。
 - `POST /api/auth/login` / `POST /api/auth/logout` / `GET /api/auth/status`：统一登录/登出与会话状态查询，根据用户名返回 `role`（`user` 或 `admin`）。
 - `POST /api/admin/change-password`：管理员修改自身密码，需有效管理员会话。
 - `GET /api/admin/users` / `POST /api/admin/users`：管理员获取/创建用户（含角色、启用状态、是否记录报价、是否可查看记录）。
