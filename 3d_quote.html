@@ -983,8 +983,23 @@
   </div>
 
   <script>
-    // ===== API 地址：这里改成你的后端地址 =====
-    const API_BASE = "http://10.1.1.21:8000/api";
+    // ===== API 地址：默认同源 /api，可用 window.API_BASE 或 ?api_base= 覆盖 =====
+    const urlParams = new URLSearchParams(window.location.search);
+    const API_BASE = urlParams.get("api_base") || window.API_BASE || "/api";
+
+    // 将管理员 UI 从初始 DOM 中移除，非管理员无法在页面元素里看到
+    const adminMainOriginal = document.getElementById("adminMain");
+    const adminMountPoint = document.createElement("div");
+    adminMountPoint.id = "adminMountPoint";
+    if (adminMainOriginal?.parentNode) {
+      adminMainOriginal.parentNode.insertBefore(adminMountPoint, adminMainOriginal);
+    }
+    const adminMainTemplateHTML = adminMainOriginal?.outerHTML || "";
+    if (adminMainOriginal) adminMainOriginal.remove();
+
+    const adminTabOriginal = document.querySelector('.main-tabs .page-tab[data-main="adminMain"]');
+    const adminTabTemplateHTML = adminTabOriginal?.outerHTML || "";
+    if (adminTabOriginal) adminTabOriginal.remove();
 
     const PROCESS_TYPES = [
       { value: "FDM_3D_PRINT", label: "FDM 3D 打印" },
@@ -1073,6 +1088,8 @@
     let recordsVisibilityFilter = "all";
     let recordVisibilitySelection = "owner_only";
     let cachedProjects = [];
+    let adminEventsBound = false;
+    let adminSubTabsBound = false;
     let projectSearchKeyword = "";
     let editingProjectId = null;
 
@@ -2320,7 +2337,161 @@
       if (target) target.classList.add("active");
     }
 
+    function bindMainTabButton(btn) {
+      if (!btn || btn.dataset.bound === "1") return;
+      btn.dataset.bound = "1";
+      btn.addEventListener("click", () => {
+        if (btn.dataset.main === "adminMain" && !isAdmin) {
+          alert("仅管理员可访问，请先使用管理员账户登录。");
+          return;
+        }
+        if (btn.dataset.main === "recordsMain") {
+          if (!isAuthenticated()) {
+            alert("请先登录后查看报价记录。");
+            return;
+          }
+          if (!isAdmin && !canViewRecords) {
+            alert("当前账号无查看报价记录的权限，请联系管理员开启。");
+            return;
+          }
+        }
+        if (btn.dataset.main === "accountMain" && !isAuthenticated()) {
+          alert("请先登录后再进行账户设置。");
+          return;
+        }
+        setMainTab(btn);
+      });
+    }
+
+    function bindMainTabButtons() {
+      document.querySelectorAll(".main-tabs .page-tab").forEach(bindMainTabButton);
+    }
+
+    function bindAdminSubTabs() {
+      const tabs = document.querySelectorAll("#adminTabs .page-tab");
+      if (!tabs.length) return;
+      tabs.forEach(btn => {
+        if (btn.dataset.bound === "1") return;
+        btn.dataset.bound = "1";
+        btn.addEventListener("click", () => {
+          setAdminSubTab(btn);
+          const targetId = btn.getAttribute("data-section");
+          if (targetId === "recordsSection") {
+            renderQuoteRecords();
+            renderQuoteSummary();
+          }
+          if (targetId === "userManagementSection") {
+            renderUserTable();
+          }
+          if (targetId === "projectSection") {
+            refreshProjects();
+          }
+        });
+      });
+      adminSubTabsBound = true;
+    }
+
+    function bindAdminEventHandlers() {
+      if (adminEventsBound) return;
+      if (!document.getElementById("adminMain")) return;
+
+      document.getElementById("projectCreateBtn")?.addEventListener("click", () => openProjectModal());
+      document.getElementById("projectAdminSearchBtn")?.addEventListener("click", () => {
+        const kw = document.getElementById("projectAdminSearch")?.value || "";
+        refreshProjects(kw);
+      });
+      document.getElementById("projectAdminResetBtn")?.addEventListener("click", () => {
+        const input = document.getElementById("projectAdminSearch");
+        if (input) input.value = "";
+        refreshProjects("");
+      });
+      document.getElementById("projectTableBody")?.addEventListener("click", (e) => {
+        const btn = e.target.closest("button[data-action]");
+        if (!btn) return;
+        const id = btn.getAttribute("data-id");
+        const action = btn.getAttribute("data-action");
+        const project = cachedProjects.find(p => p.id === id);
+        if (action === "edit" && project) {
+          openProjectModal(project);
+        } else if (action === "delete") {
+          deleteProject(id);
+        }
+      });
+      document.getElementById("projectModalSubmit")?.addEventListener("click", submitProjectModal);
+      document.getElementById("projectModalClose")?.addEventListener("click", closeProjectModal);
+      document.getElementById("projectModalCancel")?.addEventListener("click", closeProjectModal);
+
+      document.getElementById("createUserBtn")?.addEventListener("click", createUser);
+      document.getElementById("userTableBody")?.addEventListener("click", (e) => {
+        const btn = e.target.closest("button[data-action]");
+        if (!btn) return;
+        const username = btn.getAttribute("data-username");
+        const action = btn.getAttribute("data-action");
+        if (action === "reset") {
+          resetUserPassword(username);
+        } else if (action === "toggle") {
+          const active = btn.getAttribute("data-active") === "true";
+          toggleUser(username, !active);
+        } else if (action === "edit") {
+          const currentRole = btn.getAttribute("data-role") || "user";
+          const newName = window.prompt("请输入新的用户名（留空则不修改）：", username) || username;
+          const newRole = window.prompt("请输入角色 admin/user：", currentRole) || currentRole;
+          updateUser(username, newName.trim(), newRole.trim());
+        } else if (action === "record") {
+          const user = getCachedUser(username);
+          if (!user) return;
+          updateUser(username, user.username, user.role, { recordEnabled: !user.recordEnabled });
+        } else if (action === "view") {
+          const user = getCachedUser(username);
+          if (!user) return;
+          updateUser(username, user.username, user.role, { canViewRecords: !user.canViewRecords });
+        } else if (action === "delete") {
+          if (window.confirm(`确定要删除用户 ${username} 吗？`)) {
+            deleteUser(username);
+          }
+        }
+      });
+
+      adminEventsBound = true;
+    }
+
+    function mountAdminUI() {
+      if (!isAdmin) return;
+      if (!document.getElementById("adminMain") && adminMainTemplateHTML && adminMountPoint) {
+        adminMountPoint.innerHTML = adminMainTemplateHTML;
+      }
+      const mainTabs = document.querySelector(".main-tabs");
+      if (mainTabs && !document.querySelector('.main-tabs .page-tab[data-main="adminMain"]') && adminTabTemplateHTML) {
+        const temp = document.createElement("div");
+        temp.innerHTML = adminTabTemplateHTML.trim();
+        const tabBtn = temp.firstElementChild;
+        if (tabBtn) {
+          mainTabs.appendChild(tabBtn);
+          bindMainTabButton(tabBtn);
+        }
+      }
+      bindAdminSubTabs();
+      bindAdminEventHandlers();
+    }
+
+    function unmountAdminUI() {
+      const adminTab = document.querySelector('.main-tabs .page-tab[data-main="adminMain"]');
+      if (adminTab) adminTab.remove();
+      const adminMain = document.getElementById("adminMain");
+      if (adminMain) adminMain.remove();
+      if (adminMountPoint) adminMountPoint.innerHTML = "";
+      adminEventsBound = false;
+      adminSubTabsBound = false;
+    }
+
     function updateAuthUI() {
+      if (isAdmin) {
+        mountAdminUI();
+      } else {
+        unmountAdminUI();
+      }
+      bindMainTabButtons();
+
       const loginPanel = document.getElementById("loginPanel");
       const appContent = document.getElementById("appContent");
       const statusEl = document.getElementById("userStatus");
@@ -3580,46 +3751,7 @@
 
     // ===== 页面初始化 =====
     window.addEventListener("DOMContentLoaded", async () => {
-      document.querySelectorAll(".main-tabs .page-tab").forEach(btn => {
-        btn.addEventListener("click", () => {
-          if (btn.dataset.main === "adminMain" && !isAdmin) {
-            alert("仅管理员可访问，请先使用管理员账户登录。");
-            return;
-          }
-          if (btn.dataset.main === "recordsMain") {
-            if (!isAuthenticated()) {
-              alert("请先登录后查看报价记录。");
-              return;
-            }
-            if (!isAdmin && !canViewRecords) {
-              alert("当前账号无查看报价记录的权限，请联系管理员开启。");
-              return;
-            }
-          }
-          if (btn.dataset.main === "accountMain" && !isAuthenticated()) {
-            alert("请先登录后再进行账户设置。");
-            return;
-          }
-          setMainTab(btn);
-        });
-      });
-
-      document.querySelectorAll("#adminTabs .page-tab").forEach(btn => {
-        btn.addEventListener("click", () => {
-          setAdminSubTab(btn);
-          const targetId = btn.getAttribute("data-section");
-          if (targetId === "recordsSection") {
-            renderQuoteRecords();
-            renderQuoteSummary();
-          }
-          if (targetId === "userManagementSection") {
-            renderUserTable();
-          }
-          if (targetId === "projectSection") {
-            refreshProjects();
-          }
-        });
-      });
+      bindMainTabButtons();
       initProcessTypeSelector();
       updateAuthUI();
       await refreshAuthState();
