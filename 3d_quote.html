@@ -2828,6 +2828,7 @@
             profitMargin: quote.profitMargin,
             materialCostPerPart: quote.materialCostPerPart,
             machineCostPerPart: quote.machineCostPerPart,
+            laborCostPerPart: quote.laborCostPerPart,
             postCostPerPart: quote.postCostPerPart,
             setupCostPerPart: quote.setupCostPerPart,
             material: quote.material,
@@ -3435,16 +3436,22 @@
       const inferredAllIn = hourlyRateIncludesOperational === true
         || (hourlyRateIncludesOperational == null && baseMachineHourly > 0 && depreciationHourly === 0);
       const shouldAddOperational = !inferredAllIn;
-      const effectiveMachineHourly = machineHourly + (shouldAddOperational ? operationalHourly : 0);
+      const printLaborHourly = shouldAddOperational ? operatorHourly : 0;
+      const machineOverheadHourly = shouldAddOperational ? (overheadHourly + electricityHourly) : 0;
+      const effectiveMachineHourly = machineHourly + machineOverheadHourly;
       const machineCostPerPart = totalHours * effectiveMachineHourly;
+      const printLaborCostPerPart = totalHours * printLaborHourly;
       const totalPostMinutes = (post.baseMinutes || 0) + (post.minutesPerGram || 0) * weight;
       const postLaborCost = (processCosts.laborHourlyCost || 0) * totalPostMinutes / 60;
       const postMaterialCost = (post.extraMaterialCostPerGram || 0) * weight;
       const postMultiplier = post.costMultiplier || 1;
-      const postCostPerPart = (postLaborCost + postMaterialCost) * postMultiplier;
+      const postLaborPortion = postLaborCost * postMultiplier;
+      const postMaterialPortion = postMaterialCost * postMultiplier;
+      const postCostPerPart = postLaborPortion + postMaterialPortion;
+      const laborCostPerPart = printLaborCostPerPart + postLaborPortion;
       const setupCostPerPart = quantity > 0 ? runtimeConfig.setupFee / quantity : runtimeConfig.setupFee;
 
-      const costSumPerPart = materialCostPerPart + machineCostPerPart + postCostPerPart + setupCostPerPart;
+      const costSumPerPart = materialCostPerPart + machineCostPerPart + laborCostPerPart + postMaterialPortion + setupCostPerPart;
       const withProfitPerPart = costSumPerPart * (1 + profitMargin);
       const finalPricePerPart = Math.max(withProfitPerPart, minPricePerPart);
       const totalPrice = finalPricePerPart * quantity;
@@ -3469,11 +3476,12 @@
         `   - 单件耗材：${materialUsageLabel} → 材料成本：${formatMoney(materialCostPerPart)}`,
         `▶ 设备：${machine.vendor} / ${machine.name}  ${machineHourlyLabel} 元/小时`,
         `   - 单件打印时间：${days} 天 ${hours} 小时 ${minutes} 分钟 ≈ ${totalHours.toFixed(2)} 小时`,
-        `   - 设备成本：${formatMoney(machineCostPerPart)}`,
-        `▶ 后处理：${post.name} → 单件后处理成本：${formatMoney(postCostPerPart)}（时间 ${totalPostMinutes.toFixed(2)} 分钟，人工 ${formatMoney(postLaborCost)}，材料 ${formatMoney(postMaterialCost)}，系数 x${postMultiplier.toFixed(2)}）`,
+        `   - 设备成本：${formatMoney(machineCostPerPart)}（含折旧/租赁 + 电费/杂项）`,
+        `   - 人工成本：${formatMoney(laborCostPerPart)}（打印人工 ${formatMoney(printLaborCostPerPart)} + 后处理人工 ${formatMoney(postLaborPortion)}）`,
+        `▶ 后处理：${post.name} → 单件后处理成本：${formatMoney(postCostPerPart)}（时间 ${totalPostMinutes.toFixed(2)} 分钟，人工 ${formatMoney(postLaborPortion)}，材料 ${formatMoney(postMaterialPortion)}，系数 x${postMultiplier.toFixed(2)}）`,
         `▶ 上机/调机费（订单）：${formatMoney(runtimeConfig.setupFee)}  分摊后每件：${formatMoney(setupCostPerPart)}`,
         "",
-        `▶ 单件成本小计：${formatMoney(costSumPerPart)}`,
+        `▶ 单件成本小计：${formatMoney(costSumPerPart)}（材料 + 设备 + 人工 + 后处理材料 + 上机费分摊）`,
         `▶ 利润率：${(profitMargin * 100).toFixed(0)}%`,
         `▶ 单件最低价：${formatMoney(minPricePerPart)}`,
         `▶ 含利润单价：${formatMoney(withProfitPerPart)}`,
@@ -3501,10 +3509,14 @@
         minPricePerPart,
         materialCostPerPart,
         machineCostPerPart,
+        laborCostPerPart,
         postCostPerPart,
         postMultiplier,
         postLaborCost,
+        postLaborPortion,
         postMaterialCost,
+        postMaterialPortion,
+        printLaborCostPerPart,
         totalPostMinutes,
         setupCostPerPart,
         machineHourlyRateUsed: effectiveMachineHourly,
@@ -3547,15 +3559,16 @@
         `设备：${lastQuote.machine.vendor} / ${lastQuote.machine.name}`,
         `设备小时成本：${formatMoney(lastQuote.machineHourlyRateUsed || lastQuote.machine.hourlyRate)} 元/小时`,
         `单件打印时间：${lastQuote.days} 天 ${lastQuote.hours} 小时 ${lastQuote.minutes} 分钟 ≈ ${lastQuote.totalHours.toFixed(2)} 小时`,
-        `设备成本（单件）：${formatMoney(lastQuote.machineCostPerPart)}`,
+        `设备成本（单件）：${formatMoney(lastQuote.machineCostPerPart)}（含折旧/租赁 + 电费/杂项）`,
+        `人工成本（单件）：${formatMoney(lastQuote.laborCostPerPart)}（打印人工 ${formatMoney(lastQuote.printLaborCostPerPart)} + 后处理人工 ${formatMoney(lastQuote.postLaborPortion)}）`,
         "",
         `后处理等级：${lastQuote.post.name}`,
-        `后处理成本（单件）：${formatMoney(lastQuote.postCostPerPart)}（时间 ${lastQuote.totalPostMinutes.toFixed(2)} 分钟，人工 ${formatMoney(lastQuote.postLaborCost)}, 材料 ${formatMoney(lastQuote.postMaterialCost)}, 系数 x${(lastQuote.postMultiplier || 1).toFixed(2)}）`,
+        `后处理成本（单件）：${formatMoney(lastQuote.postCostPerPart)}（时间 ${lastQuote.totalPostMinutes.toFixed(2)} 分钟，人工 ${formatMoney(lastQuote.postLaborPortion)}, 材料 ${formatMoney(lastQuote.postMaterialPortion)}, 系数 x${(lastQuote.postMultiplier || 1).toFixed(2)}）`,
         "",
         `上机/调机费（订单）：${formatMoney(runtimeConfig.setupFee)}`,
         `分摊后上机费（单件）：${formatMoney(lastQuote.setupCostPerPart)}`,
         "",
-        `单件成本小计：${formatMoney(lastQuote.costSumPerPart)}`,
+        `单件成本小计：${formatMoney(lastQuote.costSumPerPart)}（材料 + 设备 + 人工 + 后处理材料 + 上机费分摊）`,
         `利润率：${(lastQuote.profitMargin * 100).toFixed(0)}%`,
         `单件最低价：${formatMoney(lastQuote.minPricePerPart)}`,
         `含利润单价：${formatMoney(lastQuote.withProfitPerPart)}`,

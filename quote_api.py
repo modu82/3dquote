@@ -135,6 +135,7 @@ class QuoteRecordCreate(BaseModel):
     profitMargin: float
     materialCostPerPart: float
     machineCostPerPart: float
+    laborCostPerPart: float = 0.0
     postCostPerPart: float
     setupCostPerPart: float
     material: Dict
@@ -176,6 +177,7 @@ class FullBackup(BaseModel):
 
     createdAt: str
     settings: Settings
+    settingsBackup: Optional[Settings] = None
     accounts: List[Account]
     quotes: List[QuoteRecord]
     projects: List[Project]
@@ -437,6 +439,16 @@ def load_settings_backup() -> Settings:
         raise RuntimeError(f"无法读取备份：{exc}") from exc
 
 
+def try_load_settings_backup(default: Optional[Settings] = None) -> Optional[Settings]:
+    try:
+        return load_settings_backup()
+    except FileNotFoundError:
+        return default
+    except Exception as exc:
+        print("Failed to load settings backup:", exc)
+        return default
+
+
 def save_full_backup(payload: FullBackup):
     os.makedirs(os.path.dirname(FULL_BACKUP_FILE), exist_ok=True)
     with open(FULL_BACKUP_FILE, "w", encoding="utf-8") as f:
@@ -571,6 +583,7 @@ def load_quote_records() -> List[QuoteRecord]:
                     "visibility": item.get("visibility", "admin_only"),
                     "adopted": item.get("adopted", False),
                     "createdBy": item.get("createdBy") or item.get("username") or "unknown",
+                    "laborCostPerPart": item.get("laborCostPerPart", 0.0),
                 }
                 merged = {**item, **defaults}
                 if merged["visibility"] not in ("admin_only", "all_users", "owner_only"):
@@ -777,9 +790,12 @@ def backup_all(
     """将当前全部关键数据写入全量备份文件。"""
 
     require_admin(x_admin_session, x_user_session, x_session)
+    current_settings = load_settings()
+    backup_settings = try_load_settings_backup(current_settings)
     backup = FullBackup(
         createdAt=datetime.utcnow().isoformat() + "Z",
-        settings=load_settings(),
+        settings=current_settings,
+        settingsBackup=backup_settings,
         accounts=load_accounts(),
         quotes=load_quote_records(),
         projects=load_projects(),
@@ -806,7 +822,7 @@ def restore_full_backup(
 
     ensure_settings_valid(backup.settings)
     save_settings(backup.settings)
-    save_settings_backup(backup.settings)
+    save_settings_backup(backup.settingsBackup or backup.settings)
     save_quote_records(backup.quotes)
     save_projects(backup.projects)
     save_accounts(backup.accounts)
